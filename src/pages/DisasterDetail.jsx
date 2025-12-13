@@ -1,19 +1,24 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import { useAuth } from '../context/AuthContext';
 import Navbar from '../components/Navbar';
 import { MapPin, Users, DollarSign, ArrowLeft, Calendar } from 'lucide-react';
 
 const DisasterDetail = () => {
     const { id } = useParams();
     const navigate = useNavigate();
+    const { user } = useAuth(); // Get current user
     const [disaster, setDisaster] = useState(null);
     const [loading, setLoading] = useState(true);
     const [lightboxImage, setLightboxImage] = useState(null);
     const [showDonationModal, setShowDonationModal] = useState(false);
+    const [isVolunteer, setIsVolunteer] = useState(false); // Track status
+    const [volunteerLoading, setVolunteerLoading] = useState(false);
 
     useEffect(() => {
-        const fetchDisaster = async () => {
+        const fetchData = async () => {
+            // 1. Fetch Disaster Details
             const { data, error } = await supabase
                 .from('disasters')
                 .select('*')
@@ -22,10 +27,71 @@ const DisasterDetail = () => {
 
             if (error) console.error(error);
             else setDisaster(data);
+
+            // 2. Check if User is Volunteer (if logged in)
+            if (user) {
+                const { data: volData } = await supabase
+                    .from('disaster_volunteers')
+                    .select('id')
+                    .eq('disaster_id', id)
+                    .eq('user_id', user.id)
+                    .single();
+
+                setIsVolunteer(!!volData);
+            }
+
             setLoading(false);
         };
-        fetchDisaster();
-    }, [id]);
+        fetchData();
+    }, [id, user]);
+
+    const handleVolunteerToggle = async () => {
+        if (!user) {
+            alert("Please login to join as a volunteer.");
+            // navigate('/login'); // Optional
+            return;
+        }
+
+        setVolunteerLoading(true);
+        try {
+            if (isVolunteer) {
+                // Leave
+                const { error } = await supabase
+                    .from('disaster_volunteers')
+                    .delete()
+                    .eq('disaster_id', id)
+                    .eq('user_id', user.id);
+
+                if (error) throw error;
+
+                setIsVolunteer(false);
+                setDisaster(prev => ({
+                    ...prev,
+                    assigned_volunteers_count: Math.max(0, (prev.assigned_volunteers_count || 0) - 1)
+                }));
+                alert("You have withdrawn from this volunteer effort.");
+            } else {
+                // Join
+                const { error } = await supabase
+                    .from('disaster_volunteers')
+                    .insert([{ disaster_id: id, user_id: user.id }]);
+
+                if (error) throw error;
+
+                setIsVolunteer(true);
+                setDisaster(prev => ({
+                    ...prev,
+                    assigned_volunteers_count: (prev.assigned_volunteers_count || 0) + 1
+                }));
+                alert("Thank you! You have joined as a volunteer.");
+            }
+        } catch (error) {
+            console.error("Volunteer Error:", error);
+            alert("Error updating volunteer status.");
+        } finally {
+            setVolunteerLoading(false);
+        }
+    };
 
     if (loading) return <div style={{ background: '#1a1a1a', minHeight: '100vh', padding: '2rem', color: '#888' }}>Loading...</div>;
     if (!disaster) return <div style={{ background: '#1a1a1a', minHeight: '100vh', padding: '2rem', color: 'white' }}>Disaster not found.</div>;
@@ -123,8 +189,18 @@ const DisasterDetail = () => {
                                         <span style={{ color: '#666', marginLeft: '4px' }}>/ {disaster.volunteers_needed} volunteers joined</span>
                                     </div>
                                 </div>
-                                <button style={{ width: '100%', padding: '12px', background: '#646cff', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>
-                                    Join as Volunteer
+                                <button
+                                    onClick={handleVolunteerToggle}
+                                    disabled={volunteerLoading}
+                                    style={{
+                                        width: '100%', padding: '12px',
+                                        background: isVolunteer ? '#333' : '#646cff',
+                                        color: isVolunteer ? '#aaa' : 'white',
+                                        border: isVolunteer ? '1px solid #555' : 'none',
+                                        borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+                                    }}>
+                                    {volunteerLoading ? 'Processing...' : isVolunteer ? 'Joined (Click to Leave)' : 'Join as Volunteer'}
                                 </button>
                             </div>
                         </div>

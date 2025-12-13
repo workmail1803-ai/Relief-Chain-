@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../supabaseClient';
 import { compressImage } from '../utils/imageUtils';
+import UsersAndVolunteersTab from '../components/UsersAndVolunteersTab';
 import {
     LayoutDashboard, AlertTriangle, Stethoscope, Users,
     ShoppingBag, DollarSign, LogOut, Plus, Search
@@ -11,9 +13,11 @@ const AdminDashboard = () => {
     const { logout } = useAuth();
     const [activeTab, setActiveTab] = useState('overview');
 
+    const navigate = useNavigate();
+
     const handleLogout = async () => {
         await logout();
-        window.location.href = '/login';
+        navigate('/login');
     };
 
     const renderContent = () => {
@@ -25,7 +29,7 @@ const AdminDashboard = () => {
             case 'medical':
                 return <div className="glass-card p-6">Medical Management (Coming Soon)</div>;
             case 'users':
-                return <div className="glass-card p-6">User & Volunteer Management (Coming Soon)</div>;
+                return <UsersAndVolunteersTab />;
             case 'donations':
                 return <DonationsTab />;
             case 'shop':
@@ -76,7 +80,7 @@ const AdminDashboard = () => {
                     />
                     <SidebarItem
                         icon={<Users size={20} />}
-                        label="Users & Volunteers"
+                        label={<span>Users & Volunteers <span style={{ fontSize: '0.6em', background: 'red', color: 'white', padding: '2px 4px', borderRadius: '4px', verticalAlign: 'middle' }}>NEW</span></span>}
                         active={activeTab === 'users'}
                         onClick={() => setActiveTab('users')}
                     />

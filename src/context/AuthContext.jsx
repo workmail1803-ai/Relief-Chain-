@@ -25,9 +25,15 @@ export const AuthProvider = ({ children }) => {
 
             if (error) {
                 console.error('Error fetching role:', error);
+                // Do not immediately revoke admin if it's a transient error, 
+                // but for security we usually default to false.
+                // However, to avoid flickering on transient errors, we might check if we already have admin.
+                // For now, let's keep it safe but log it.
                 setIsAdmin(false);
             } else {
-                setIsAdmin(data?.role === 'admin');
+                // Case-insensitive check
+                const role = data?.role?.toLowerCase();
+                setIsAdmin(role === 'admin');
             }
         } catch (err) {
             console.error('Unexpected error checking role:', err);
@@ -56,6 +62,9 @@ export const AuthProvider = ({ children }) => {
                 }
             } catch (error) {
                 console.error("Auth initialization error:", error);
+            } finally {
+                // If no session found initially, we should stop loading (unless listener picks it up)
+                // But wait for listener to confirm.
             }
 
             // 2. ONLY after initial check, set up the listener
@@ -69,6 +78,8 @@ export const AuthProvider = ({ children }) => {
                 setUser(currentSession?.user ?? null);
 
                 if (currentSession?.user) {
+                    // Only check role if it's a relevant event, or always to be safe?
+                    // Always checking is safer but slower.
                     await checkAdminRole(currentSession.user.id);
                 } else {
                     setIsAdmin(false);
@@ -79,12 +90,6 @@ export const AuthProvider = ({ children }) => {
             });
 
             authSubscription = subscription;
-
-            // If we're still loading (e.g. no events fired yet, though they usually do),
-            // we could force it off, but onAuthStateChange usually fires 'INITIAL_SESSION' immediately.
-            // If it doesn't, we might hang on loading. 
-            // Safeguard: if there was no initial session and no event fires immediately? 
-            // Supabase guarantees an event on subscription.
         };
 
         initializeAuth();
@@ -125,6 +130,11 @@ export const AuthProvider = ({ children }) => {
 
     const adminLogin = async (email, password) => {
         setLoading(true); // Start loading UI
+
+        // 1. Sign out any existing session first to ensure clean state? 
+        // Can be useful if user was logged in as regular user.
+        // But might be jarring. Let's rely on signInWithPassword switching it.
+
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
         if (error) {
@@ -139,7 +149,9 @@ export const AuthProvider = ({ children }) => {
             .eq('id', data.user.id)
             .single();
 
-        if (profileError || profile?.role !== 'admin') {
+        const role = profile?.role?.toLowerCase();
+
+        if (profileError || role !== 'admin') {
             await logout(); // Log them out immediately if not admin
             setLoading(false);
             return {

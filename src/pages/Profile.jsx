@@ -8,6 +8,7 @@ const Profile = () => {
     const { user } = useAuth();
     const [profile, setProfile] = useState(null);
     const [donations, setDonations] = useState([]);
+    const [volunteerActivities, setVolunteerActivities] = useState([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -42,6 +43,19 @@ const Profile = () => {
 
             if (donationError) console.error('Error fetching donations:', donationError);
             else setDonations(donationData || []);
+
+            // 3. Fetch Volunteer Activities
+            const { data: volData, error: volError } = await supabase
+                .from('disaster_volunteers')
+                .select(`
+                    *,
+                    disasters (title, location, image_url, severity)
+                `)
+                .eq('user_id', user.id)
+                .order('created_at', { ascending: false });
+
+            if (volError) console.error('Error fetching volunteer data:', volError);
+            else setVolunteerActivities(volData || []);
 
         } catch (error) {
             console.error('Error loading data:', error);
@@ -98,6 +112,12 @@ const Profile = () => {
                                     <p style={{ color: '#aaa', fontSize: '0.9rem', marginBottom: '4px' }}>Campaigns Supported</p>
                                     <p style={{ color: 'white', fontSize: '1.5rem', fontWeight: 'bold' }}>{campaignsSupported}</p>
                                 </div>
+                                <div style={{ marginTop: '1rem' }}>
+                                    <p style={{ color: '#aaa', fontSize: '0.9rem', marginBottom: '4px' }}>Completed Missions</p>
+                                    <p style={{ color: '#6366f1', fontSize: '1.5rem', fontWeight: 'bold' }}>
+                                        {volunteerActivities.filter(v => v.status === 'completed').length}
+                                    </p>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -138,6 +158,50 @@ const Profile = () => {
                                                 color: donation.status === 'approved' ? '#10b981' : donation.status === 'rejected' ? '#ef4444' : '#f59e0b'
                                             }}>
                                                 {donation.status}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Volunteer History */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginTop: '1rem' }}>
+                        <h2 style={{ color: 'white', fontSize: '1.4rem' }}>Volunteering Activities</h2>
+
+                        {volunteerActivities.length === 0 ? (
+                            <div className="glass-card" style={{ padding: '3rem', textAlign: 'center', color: '#666' }}>
+                                <User size={48} style={{ marginBottom: '1rem', opacity: 0.2 }} />
+                                <p>You haven't joined any relief efforts yet.</p>
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                {volunteerActivities.map(item => (
+                                    <div key={item.id} className="glass-card" style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                                        {/* Image */}
+                                        <div style={{ width: '60px', height: '60px', borderRadius: '8px', overflow: 'hidden' }}>
+                                            <img
+                                                src={item.disasters?.image_url || 'https://via.placeholder.com/60'}
+                                                alt="Disaster"
+                                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                            />
+                                        </div>
+
+                                        <div style={{ flex: 1 }}>
+                                            <h3 style={{ color: 'white', fontSize: '1.1rem', margin: '0 0 4px 0' }}>{item.disasters?.title || 'Unknown Disaster'}</h3>
+                                            <p style={{ color: '#888', fontSize: '0.85rem', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                <User size={14} /> Joined on {new Date(item.created_at).toLocaleDateString()}
+                                            </p>
+                                        </div>
+
+                                        <div style={{ textAlign: 'right' }}>
+                                            <span style={{
+                                                padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold',
+                                                background: item.status === 'completed' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(99, 102, 241, 0.2)',
+                                                color: item.status === 'completed' ? '#10b981' : '#6366f1'
+                                            }}>
+                                                {item.status === 'completed' ? 'COMPLETED' : 'JOINED'}
                                             </span>
                                         </div>
                                     </div>

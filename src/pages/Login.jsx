@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 
@@ -9,6 +9,12 @@ const Login = () => {
     const [loading, setLoading] = useState(false);
     const { login, user } = useAuth();
     const navigate = useNavigate();
+
+    useEffect(() => {
+        if (user) {
+            navigate('/dashboard');
+        }
+    }, [user, navigate]);
 
 
     const handleSubmit = async (e) => {
