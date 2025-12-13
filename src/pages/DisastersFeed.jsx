@@ -9,27 +9,51 @@ const DisastersFeed = () => {
     const [loading, setLoading] = useState(true);
     const [errorMsg, setErrorMsg] = useState(null);
 
-    // 1. Fetch Data
-    useEffect(() => {
-        const fetchDisasters = async () => {
-            try {
-                const { data, error } = await supabase
-                    .from('disasters')
-                    .select('*')
-                    .order('created_at', { ascending: false });
+    const [page, setPage] = useState(0);
+    const [hasMore, setHasMore] = useState(true);
+    const PER_PAGE = 9; // Grid of 3x3
 
-                if (error) throw error;
-                setDisasters(data || []);
-            } catch (error) {
-                console.error('Error fetching data:', error);
-                setErrorMsg(error.message);
-            } finally {
-                setLoading(false);
+    const fetchDisasters = async (pageNumber = 0) => {
+        try {
+            setLoading(true);
+            const from = pageNumber * PER_PAGE;
+            const to = from + PER_PAGE - 1;
+
+            const { data, error } = await supabase
+                .from('disasters')
+                .select('id, title, location, target_amount, collected_amount, image_url, is_urgent, created_at')
+                .order('created_at', { ascending: false })
+                .range(from, to);
+
+            if (error) throw error;
+
+            if (data.length < PER_PAGE) {
+                setHasMore(false);
             }
-        };
 
-        fetchDisasters();
+            if (pageNumber === 0) {
+                setDisasters(data || []);
+            } else {
+                setDisasters(prev => [...prev, ...data]);
+            }
+        } catch (error) {
+            console.error('Error fetching data:', error);
+            setErrorMsg(error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // 1. Initial Fetch
+    useEffect(() => {
+        fetchDisasters(0);
     }, []);
+
+    const loadMore = () => {
+        const nextPage = page + 1;
+        setPage(nextPage);
+        fetchDisasters(nextPage);
+    };
 
     // 2. Scroll Animation Logic
     const observer = useRef(
@@ -235,6 +259,37 @@ const DisastersFeed = () => {
                                         </div>
                                     </div>
                                 ))}
+                            </div>
+                        )}
+
+                        {/* Load More Button */}
+                        {hasMore && !loading && disasters.length > 0 && (
+                            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '1rem' }}>
+                                <button
+                                    onClick={loadMore}
+                                    style={{
+                                        background: 'transparent',
+                                        border: '1px solid #444',
+                                        color: '#aaa',
+                                        padding: '10px 24px',
+                                        borderRadius: '8px',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s',
+                                        fontSize: '0.9rem',
+                                        display: 'flex', alignItems: 'center', gap: '8px'
+                                    }}
+                                    className="hover:bg-zinc-800 hover:text-white hover:border-zinc-600"
+                                    onMouseOver={(e) => {
+                                        e.currentTarget.style.borderColor = '#666';
+                                        e.currentTarget.style.color = 'white';
+                                    }}
+                                    onMouseOut={(e) => {
+                                        e.currentTarget.style.borderColor = '#444';
+                                        e.currentTarget.style.color = '#aaa';
+                                    }}
+                                >
+                                    Load More Missions <ArrowRight size={16} />
+                                </button>
                             </div>
                         )}
                     </>

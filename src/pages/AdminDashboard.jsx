@@ -172,6 +172,9 @@ const DisastersTab = () => {
     const [showForm, setShowForm] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [editingId, setEditingId] = useState(null);
+    const [page, setPage] = useState(0);
+    const [hasMore, setHasMore] = useState(true);
+    const PER_PAGE = 10;
 
     const [formData, setFormData] = useState({
         title: '',
@@ -188,19 +191,38 @@ const DisastersTab = () => {
     });
 
     useEffect(() => {
-        fetchDisasters();
+        fetchDisasters(0);
     }, []);
 
-    const fetchDisasters = async () => {
+    const fetchDisasters = async (pageNumber = 0) => {
         setLoading(true);
+        const from = pageNumber * PER_PAGE;
+        const to = from + PER_PAGE - 1;
+
         const { data, error } = await supabase
             .from('disasters')
-            .select('*')
-            .order('created_at', { ascending: false });
+            .select('id, title, location, severity, target_amount, collected_amount, assigned_volunteers_count, volunteers_needed, is_urgent, created_at')
+            .order('created_at', { ascending: false })
+            .range(from, to);
 
-        if (error) console.error('Error fetching disasters:', error);
-        else setDisasters(data || []);
+        if (error) {
+            console.error('Error fetching disasters:', error);
+        } else {
+            if (data.length < PER_PAGE) setHasMore(false);
+
+            if (pageNumber === 0) {
+                setDisasters(data || []);
+            } else {
+                setDisasters(prev => [...prev, ...data]);
+            }
+        }
         setLoading(false);
+    };
+
+    const loadMore = () => {
+        const nextPage = page + 1;
+        setPage(nextPage);
+        fetchDisasters(nextPage);
     };
 
     const handleInteract = (e) => {
@@ -475,6 +497,13 @@ const DisastersTab = () => {
                         </tbody>
                     </table>
                 )}
+                {hasMore && !loading && (
+                    <div style={{ textAlign: 'center', marginTop: '1rem' }}>
+                        <button onClick={loadMore} style={{ background: 'transparent', border: '1px solid #444', color: '#888', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer' }}>
+                            Load More Results
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -484,24 +513,51 @@ const DisastersTab = () => {
 const DonationsTab = () => {
     const [donations, setDonations] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [page, setPage] = useState(0);
+    const [hasMore, setHasMore] = useState(true);
+    const PER_PAGE = 20;
 
     useEffect(() => {
-        fetchDonations();
+        fetchDonations(0);
     }, []);
 
-    const fetchDonations = async () => {
+    const fetchDonations = async (pageNumber = 0) => {
         setLoading(true);
+        const from = pageNumber * PER_PAGE;
+        const to = from + PER_PAGE - 1;
+
         const { data, error } = await supabase
             .from('donations')
             .select(`
                 *,
                 disasters (title)
             `)
-            .order('created_at', { ascending: false });
+            .order('created_at', { ascending: false })
+            .range(from, to);
 
-        if (error) console.error("Error fetching donations:", error);
-        else setDonations(data || []);
+        if (error) {
+            console.error("Error fetching donations:", error);
+        } else {
+            if (data.length < PER_PAGE) setHasMore(false);
+
+            if (pageNumber === 0) {
+                setDonations(data || []);
+            } else {
+                // Eliminate duplicates just in case
+                setDonations(prev => {
+                    const existingIds = new Set(prev.map(d => d.id));
+                    const newItems = data.filter(d => !existingIds.has(d.id));
+                    return [...prev, ...newItems];
+                });
+            }
+        }
         setLoading(false);
+    };
+
+    const loadMore = () => {
+        const nextPage = page + 1;
+        setPage(nextPage);
+        fetchDonations(nextPage);
     };
 
     const handleApproval = async (donationId, status, disasterId, amount) => {
@@ -607,6 +663,13 @@ const DonationsTab = () => {
                             )}
                         </tbody>
                     </table>
+                )}
+                {hasMore && !loading && (
+                    <div style={{ textAlign: 'center', marginTop: '1rem' }}>
+                        <button onClick={loadMore} style={{ background: 'transparent', border: '1px solid #444', color: '#888', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer' }}>
+                            Load More Donations
+                        </button>
+                    </div>
                 )}
             </div>
         </div>
