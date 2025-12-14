@@ -13,6 +13,13 @@ const Dashboard = () => {
     const [disasters, setDisasters] = useState([]);
     const [medicalCases, setMedicalCases] = useState([]);
 
+    const [stats, setStats] = useState({
+        totalCollected: 0,
+        volunteers: 0,
+        activeDisasters: 0,
+        medicalCasesCount: 0
+    });
+
     useEffect(() => {
         const fetchData = async () => {
             if (user) {
@@ -23,6 +30,41 @@ const Dashboard = () => {
                     .eq('id', user.id)
                     .single();
                 setProfile(profileData);
+
+                // Fetch Stats
+                const fetchStats = async () => {
+                    // 1. Volunteers Count
+                    const { count: volCount } = await supabase
+                        .from('profiles')
+                        .select('*', { count: 'exact', head: true })
+                        .eq('role', 'volunteer');
+
+                    // 2. Active Disasters Count
+                    const { count: disCount } = await supabase
+                        .from('disasters')
+                        .select('*', { count: 'exact', head: true })
+                        .eq('status', 'active');
+
+                    // 3. Medical Cases Count
+                    const { count: medCount } = await supabase
+                        .from('medical_cases')
+                        .select('*', { count: 'exact', head: true });
+
+                    // 4. Total Funds (Fetching amounts to sum client-side for now - optimizing requires RPC)
+                    const { data: disasterFunds } = await supabase.from('disasters').select('collected_amount');
+                    const { data: medicalFunds } = await supabase.from('medical_cases').select('collected_amount');
+
+                    const totalDisaster = disasterFunds?.reduce((sum, item) => sum + (item.collected_amount || 0), 0) || 0;
+                    const totalMedical = medicalFunds?.reduce((sum, item) => sum + (item.collected_amount || 0), 0) || 0;
+
+                    setStats({
+                        totalCollected: totalDisaster + totalMedical,
+                        volunteers: volCount || 0,
+                        activeDisasters: disCount || 0,
+                        medicalCasesCount: medCount || 0
+                    });
+                };
+                fetchStats();
 
                 // Fetch Urgent Disasters (Sorted by created_at DESC as requested)
                 const { data: disasterData } = await supabase
@@ -101,7 +143,7 @@ const Dashboard = () => {
                     </div>
 
                     <div className="dashboard-fade-in" style={{ animationDelay: '0.2s' }}>
-                        <InfoCards />
+                        <InfoCards stats={stats} />
                     </div>
 
                     <div className="dashboard-fade-in" style={{ animationDelay: '0.3s' }}>
