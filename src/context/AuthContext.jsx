@@ -15,6 +15,7 @@ export const AuthProvider = ({ children }) => {
     const [isAdmin, setIsAdmin] = useState(false);
 
     // Helper to check admin role and handle loading state
+    // MODIFIED: Includes "Self-Healing" to fix missing profiles automatically
     const checkAdminRole = async (userId) => {
         try {
             const { data, error } = await supabase
@@ -23,13 +24,53 @@ export const AuthProvider = ({ children }) => {
                 .eq('id', userId)
                 .single();
 
+            if (error) {
+                // If profile missing (PGRST116), try to recreate it
+                if (error.code === 'PGRST116') {
+                    console.log("Profile missing, attempting self-healing...");
+
+                    // Recover session data for basics
+                    const { data: { session } } = await supabase.auth.getSession();
+                    const userMeta = session?.user?.user_metadata || {};
+
+                    const { error: createError } = await supabase
+                        .from('profiles')
+                        .insert([{
+                            id: userId,
+                            email: session?.user?.email || 'unknown@example.com',
+                            full_name: userMeta.full_name || 'Restored User',
+                            role: 'user' // Default to user, manual upgrade required for admin
+                        }]);
+
+                    if (createError) {
+                        console.error("Failed to self-heal profile:", createError);
+                    } else {
+                        console.log("Profile restored successfully.");
+                        // Retry check
+                        const { data: retryData } = await supabase
+                            .from('profiles')
+                            .select('role')
+                            .eq('id', userId)
+                            .single();
+
+                        if (retryData?.role === 'admin') setIsAdmin(true);
+                        else setIsAdmin(false);
+                        return;
+                    }
+                } else {
+                    console.error('Error checking role:', error);
+                }
+                setIsAdmin(false);
+                return;
+            }
+
             if (data?.role === 'admin') {
                 setIsAdmin(true);
             } else {
                 setIsAdmin(false);
             }
         } catch (err) {
-            console.error('Error checking role:', err);
+            console.error('Unexpected error checking role:', err);
             setIsAdmin(false);
         }
     };

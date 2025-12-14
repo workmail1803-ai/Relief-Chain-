@@ -7,6 +7,8 @@ const UsersAndVolunteersTab = () => {
     const [disasters, setDisasters] = useState([]);
     const [loading, setLoading] = useState(true);
 
+    // Removed aggressive auto-reload failsafe
+
     // UI States
     const [showInviteModal, setShowInviteModal] = useState(false);
     const [showMessageModal, setShowMessageModal] = useState(false);
@@ -20,25 +22,44 @@ const UsersAndVolunteersTab = () => {
 
     useEffect(() => {
         fetchData();
+
+        const channel = supabase
+            .channel('realtime-volunteers')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'disaster_volunteers' },
+                () => {
+                    fetchData();
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }, []);
 
     const fetchData = async () => {
         setLoading(true);
-        const { data: volData, error: volError } = await supabase
-            .from('disaster_volunteers')
-            .select(`*, profiles(full_name, email, phone_number), disasters(title)`)
-            .order('created_at', { ascending: false });
+        try {
+            const { data: volData, error: volError } = await supabase
+                .from('disaster_volunteers')
+                .select(`*, profiles(full_name, email, phone_number), disasters(title)`)
+                .order('created_at', { ascending: false });
 
-        if (volError) console.error("Error fetching volunteers:", volError);
-        else setVolunteers(volData || []);
+            if (volError) console.error("Error fetching volunteers:", volError);
+            else setVolunteers(volData || []);
 
-        const { data: disData } = await supabase
-            .from('disasters')
-            .select('id, title')
-            .order('created_at', { ascending: false });
-        setDisasters(disData || []);
-
-        setLoading(false);
+            const { data: disData } = await supabase
+                .from('disasters')
+                .select('id, title')
+                .order('created_at', { ascending: false });
+            setDisasters(disData || []);
+        } catch (error) {
+            console.error("Error fetching data:", error);
+        } finally {
+            setLoading(false);
+        }
     };
 
     // --- Actions ---

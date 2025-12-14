@@ -5,15 +5,49 @@ import Navbar from '../components/Navbar';
 import { User, Mail, Heart, Clock, CheckCircle, XCircle } from 'lucide-react';
 
 const Profile = () => {
-    const { user } = useAuth();
+    const { user, loading: authLoading } = useAuth();
     const [profile, setProfile] = useState(null);
     const [donations, setDonations] = useState([]);
     const [volunteerActivities, setVolunteerActivities] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [avatarUrl, setAvatarUrl] = useState(null);
+    const [uploading, setUploading] = useState(false);
+
+    // Auto-refresh if loading takes too long (Failsafe)
+    useEffect(() => {
+        let timeout;
+        if (loading) {
+            timeout = setTimeout(() => {
+                window.location.reload();
+            }, 1000); // 1 second timeout (User requested "instant", but we need >0 to avoid loops)
+        }
+        return () => clearTimeout(timeout);
+    }, [loading]);
 
     useEffect(() => {
+        // Wait for auth to initialize
+        if (authLoading) return;
+
         if (user) {
             fetchData();
+
+            const channel = supabase
+                .channel(`profile-${user.id}`)
+                .on(
+                    'postgres_changes',
+                    { event: '*', schema: 'public', table: 'donations', filter: `user_id=eq.${user.id}` },
+                    () => fetchData()
+                )
+                .on(
+                    'postgres_changes',
+                    { event: '*', schema: 'public', table: 'disaster_volunteers', filter: `user_id=eq.${user.id}` },
+                    () => fetchData()
+                )
+                .subscribe();
+
+            return () => {
+                supabase.removeChannel(channel);
+            };
         }
     }, [user]);
 
@@ -28,8 +62,16 @@ const Profile = () => {
                 .eq('id', user.id)
                 .single();
 
-            if (profileError) console.error('Error fetching profile:', profileError);
-            else setProfile(profileData);
+            if (profileError) {
+                if (profileError.code !== 'PGRST116') {
+                    console.error('Error fetching profile:', profileError);
+                }
+                // If missing, profileData is null, enabling 'Volunteer' fallback in UI
+            }
+            else {
+                setProfile(profileData);
+                if (profileData.avatar_url) setAvatarUrl(profileData.avatar_url);
+            }
 
             // 2. Fetch User Donations
             const { data: donationData, error: donationError } = await supabase
@@ -64,6 +106,46 @@ const Profile = () => {
         }
     };
 
+    const uploadAvatar = async (event) => {
+        try {
+            setUploading(true);
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${user.id}-${Math.random()}.${fileExt}`;
+            const filePath = `${fileName}`;
+
+            // 1. Upload to Storage
+            const { error: uploadError } = await supabase.storage
+                .from('avatars')
+                .upload(filePath, file);
+
+            if (uploadError) throw uploadError;
+
+            // 2. Get Public URL
+            const { data: { publicUrl } } = supabase.storage
+                .from('avatars')
+                .getPublicUrl(filePath);
+
+            // 3. Update Profile
+            const { error: updateError } = await supabase
+                .from('profiles')
+                .update({ avatar_url: publicUrl })
+                .eq('id', user.id);
+
+            if (updateError) throw updateError;
+
+            setAvatarUrl(publicUrl);
+            alert("Profile picture updated!");
+        } catch (error) {
+            console.error('Error uploading avatar:', error);
+            alert('Error uploading avatar: ' + error.message);
+        } finally {
+            setUploading(false);
+        }
+    };
+
     // Calculate Stats
     const totalDonated = donations
         .filter(d => d.status === 'approved')
@@ -93,11 +175,40 @@ const Profile = () => {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                         {/* Profile Card */}
                         <div className="glass-card" style={{ padding: '2rem', textAlign: 'center', height: 'fit-content' }}>
-                            <div style={{
-                                width: '100px', height: '100px', background: '#333', borderRadius: '50%', margin: '0 auto 1rem',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2.5rem', color: '#666'
-                            }}>
-                                {profile?.full_name?.charAt(0).toUpperCase() || <User />}
+                            <div style={{ position: 'relative', width: '100px', height: '100px', margin: '0 auto 1rem' }}>
+                                <div style={{
+                                    width: '100%', height: '100%',
+                                    background: '#333', borderRadius: '50%', overflow: 'hidden',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    fontSize: '2.5rem', color: '#666', border: '2px solid #555'
+                                }}>
+                                    {(avatarUrl || profile?.avatar_url) ? (
+                                        <img
+                                            src={avatarUrl || profile.avatar_url}
+                                            alt="Avatar"
+                                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                        />
+                                    ) : (
+                                        profile?.full_name?.charAt(0).toUpperCase() || <User />
+                                    )}
+                                </div>
+                                <label htmlFor="avatar-upload" style={{
+                                    position: 'absolute', bottom: 0, right: 0,
+                                    background: '#6366f1', color: 'white',
+                                    width: '32px', height: '32px', borderRadius: '50%',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    cursor: 'pointer', boxShadow: '0 2px 5px rgba(0,0,0,0.5)'
+                                }}>
+                                    {uploading ? '...' : '+'}
+                                </label>
+                                <input
+                                    id="avatar-upload"
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={uploadAvatar}
+                                    disabled={uploading}
+                                    style={{ display: 'none' }}
+                                />
                             </div>
                             <h2 style={{ color: 'white', fontSize: '1.5rem', marginBottom: '0.5rem' }}>{profile?.full_name || 'Volunteer'}</h2>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', color: '#888', fontSize: '0.9rem' }}>
@@ -182,7 +293,7 @@ const Profile = () => {
                                         {/* Image */}
                                         <div style={{ width: '60px', height: '60px', borderRadius: '8px', overflow: 'hidden' }}>
                                             <img
-                                                src={item.disasters?.image_url || 'https://via.placeholder.com/60'}
+                                                src={item.disasters?.image_url || 'https://placehold.co/60x60/333/999?text=Map'}
                                                 alt="Disaster"
                                                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                                             />

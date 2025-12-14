@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../supabaseClient';
 import {
-    User, Heart, AlertTriangle, Hand, Stethoscope,
+    User, Heart, AlertTriangle, Hand, Stethoscope, Users,
     ShoppingBag, Info, FileText, Bell, LogOut, Check, X
 } from 'lucide-react';
 
@@ -13,6 +13,7 @@ const Navbar = () => {
     const [notifications, setNotifications] = useState([]);
     const [showNotif, setShowNotif] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
+    const [userRole, setUserRole] = useState(null);
 
     const handleLogout = async () => {
         await logout();
@@ -22,9 +23,59 @@ const Navbar = () => {
     useEffect(() => {
         if (user) {
             fetchNotifications();
-            // Optional: Subscribe to realtime notifications here
+            fetchUserRole();
+
+            // Realtime Subscription
+            const channel = supabase
+                .channel('realtime-notifications')
+                .on(
+                    'postgres_changes',
+                    {
+                        event: '*',
+                        schema: 'public',
+                        table: 'notifications',
+                        filter: `user_id=eq.${user.id}`
+                    },
+                    (payload) => {
+                        if (payload.eventType === 'INSERT') {
+                            setNotifications(prev => [payload.new, ...prev]);
+                            setUnreadCount(prev => prev + 1);
+                            // Optional: Play sound or toast
+                        } else if (payload.eventType === 'DELETE') {
+                            setNotifications(prev => prev.filter(n => n.id !== payload.old.id));
+                            // Only decrement if it was unread (we can't know for sure without the old row data fully, 
+                            // strictly speaking DELETE payload.old only has ID for RLS policies sometimes, but let's assume safe)
+                            // A safer way is to re-fetch or just decrement safely:
+                            fetchNotifications();
+                        }
+                    }
+                )
+                .subscribe();
+
+            return () => {
+                supabase.removeChannel(channel);
+            };
         }
     }, [user]);
+
+    const fetchUserRole = async () => {
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', user.id)
+            .single();
+
+        if (error) {
+            // Ignore "no rows" error (PGRST116) as AuthContext might be healing it
+            // or it's a new user. Just don't set role yet.
+            if (error.code !== 'PGRST116') {
+                console.error("Error fetching user role:", error);
+            }
+            return;
+        }
+
+        if (data) setUserRole(data.role);
+    };
 
     const fetchNotifications = async () => {
         const { data } = await supabase
@@ -105,6 +156,22 @@ const Navbar = () => {
                 <Link to="/medical" className="nav-item">
                     <Stethoscope className="nav-icon" /> Medical
                 </Link>
+
+                {userRole === 'volunteer' ? (
+                    <>
+                        <Link to="/create-mission" className="nav-item" style={{ color: '#10b981' }}>
+                            <AlertTriangle className="nav-icon" /> Lead Mission
+                        </Link>
+                        <Link to="/volunteer-hub" className="nav-item" style={{ color: '#6366f1' }}>
+                            <Users className="nav-icon" /> Team Hub
+                        </Link>
+                    </>
+                ) : (
+                    <Link to="/volunteer-application" className="nav-item" style={{ color: '#6366f1' }}>
+                        <Hand className="nav-icon" /> Join Core Team
+                    </Link>
+                )}
+
                 <Link to="/shop" className="nav-item">
                     <ShoppingBag className="nav-icon" /> Shop
                 </Link>

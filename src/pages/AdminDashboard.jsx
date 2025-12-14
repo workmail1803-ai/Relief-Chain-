@@ -6,7 +6,7 @@ import { compressImage } from '../utils/imageUtils';
 import UsersAndVolunteersTab from '../components/UsersAndVolunteersTab';
 import {
     LayoutDashboard, AlertTriangle, Stethoscope, Users,
-    ShoppingBag, DollarSign, LogOut, Plus, Search
+    ShoppingBag, DollarSign, LogOut, Plus, Search, FileText
 } from 'lucide-react';
 
 const AdminDashboard = () => {
@@ -30,6 +30,8 @@ const AdminDashboard = () => {
                 return <div className="glass-card p-6">Medical Management (Coming Soon)</div>;
             case 'users':
                 return <UsersAndVolunteersTab />;
+            case 'applications':
+                return <VolunteerApplicationsTab />;
             case 'donations':
                 return <DonationsTab />;
             case 'shop':
@@ -80,9 +82,15 @@ const AdminDashboard = () => {
                     />
                     <SidebarItem
                         icon={<Users size={20} />}
-                        label={<span>Users & Volunteers <span style={{ fontSize: '0.6em', background: 'red', color: 'white', padding: '2px 4px', borderRadius: '4px', verticalAlign: 'middle' }}>NEW</span></span>}
+                        label={<span>Users & Volunteers</span>}
                         active={activeTab === 'users'}
                         onClick={() => setActiveTab('users')}
+                    />
+                    <SidebarItem
+                        icon={<FileText size={20} />}
+                        label="Applications"
+                        active={activeTab === 'applications'}
+                        onClick={() => setActiveTab('applications')}
                     />
                     <SidebarItem
                         icon={<DollarSign size={20} />}
@@ -168,7 +176,10 @@ const StatCard = ({ title, value, color }) => (
 
 const DisastersTab = () => {
     const [disasters, setDisasters] = useState([]);
+    const [pendingDisasters, setPendingDisasters] = useState([]);
     const [loading, setLoading] = useState(true);
+
+    // Removed aggressive auto-reload failsafe
     const [showForm, setShowForm] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [editingId, setEditingId] = useState(null);
@@ -184,7 +195,6 @@ const DisastersTab = () => {
         volunteers_needed: '',
         description: '',
         is_urgent: false,
-        is_urgent: false,
         image_url: '',
         gallery: [],
         bkash_number: ''
@@ -192,31 +202,55 @@ const DisastersTab = () => {
 
     useEffect(() => {
         fetchDisasters(0);
+
+        const channel = supabase
+            .channel('admin-realtime-disasters')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'disasters' },
+                () => fetchDisasters(0)
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }, []);
 
     const fetchDisasters = async (pageNumber = 0) => {
         setLoading(true);
-        const from = pageNumber * PER_PAGE;
-        const to = from + PER_PAGE - 1;
+        try {
+            const from = pageNumber * PER_PAGE;
+            const to = from + PER_PAGE - 1;
 
-        const { data, error } = await supabase
-            .from('disasters')
-            .select('id, title, location, severity, target_amount, collected_amount, assigned_volunteers_count, volunteers_needed, is_urgent, created_at')
-            .order('created_at', { ascending: false })
-            .range(from, to);
 
-        if (error) {
-            console.error('Error fetching disasters:', error);
-        } else {
-            if (data.length < PER_PAGE) setHasMore(false);
+            // Fetch Pending
+            const { data: pendingData } = await supabase.from('disasters').select('*').eq('status', 'pending');
+            setPendingDisasters(pendingData || []);
 
-            if (pageNumber === 0) {
-                setDisasters(data || []);
+            const { data, error } = await supabase
+                .from('disasters')
+                .select('id, title, location, severity, target_amount, collected_amount, assigned_volunteers_count, volunteers_needed, is_urgent, created_at, status')
+                .neq('status', 'pending') // Fetch all non-pending (active/completed)
+                .order('created_at', { ascending: false })
+                .range(from, to);
+
+            if (error) {
+                console.error('Error fetching disasters:', error);
             } else {
-                setDisasters(prev => [...prev, ...data]);
+                if (data.length < PER_PAGE) setHasMore(false);
+
+                if (pageNumber === 0) {
+                    setDisasters(data || []);
+                } else {
+                    setDisasters(prev => [...prev, ...data]);
+                }
             }
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
     };
 
     const loadMore = () => {
@@ -345,6 +379,47 @@ const DisastersTab = () => {
         setFormData({ title: '', location: '', severity: 'medium', target_amount: '', volunteers_needed: '', description: '', is_urgent: false, image_url: '', gallery: [], bkash_number: '' });
     };
 
+    const handleDelete = async (id) => {
+        if (!window.confirm("Are you sure you want to delete this disaster? This action cannot be undone.")) return;
+
+        const { error } = await supabase
+            .from('disasters')
+            .delete()
+            .eq('id', id);
+
+        if (error) alert("Error deleting: " + error.message);
+        else fetchDisasters();
+    };
+
+    const handleMarkComplete = async (id) => {
+        if (!window.confirm("Mark as completed? This will disable further donations and volunteering.")) return;
+
+        const { error } = await supabase
+            .from('disasters')
+            .update({ status: 'completed' })
+            .eq('id', id);
+
+        if (error) alert("Error updating status: " + error.message);
+        else fetchDisasters();
+    };
+
+    const handleApprove = async (id) => {
+        const { error } = await supabase
+            .from('disasters')
+            .update({ status: 'active' })
+            .eq('id', id);
+
+        if (error) alert("Error: " + error.message);
+        else fetchDisasters();
+    }
+
+    const handleReject = async (id) => {
+        if (!window.confirm("Reject this mission report?")) return;
+        const { error } = await supabase.from('disasters').delete().eq('id', id);
+        if (error) alert("Error: " + error.message);
+        else fetchDisasters();
+    }
+
     return (
         <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
@@ -450,6 +525,30 @@ const DisastersTab = () => {
                 </div>
             )}
 
+            {pendingDisasters.length > 0 && (
+                <div style={{ marginBottom: '2rem' }}>
+                    <h3 style={{ color: '#f59e0b', fontSize: '1.2rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <AlertTriangle /> Pending Approvals ({pendingDisasters.length})
+                    </h3>
+                    <div style={{ display: 'grid', gap: '1rem' }}>
+                        {pendingDisasters.map(p => (
+                            <div key={p.id} className="glass-card" style={{ padding: '1rem', border: '1px solid #f59e0b', display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                <img src={p.image_url} alt="Proof" style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '4px' }} />
+                                <div style={{ flex: 1 }}>
+                                    <h4 style={{ margin: 0, fontSize: '1.1rem', color: 'white' }}>{p.title}</h4>
+                                    <p style={{ margin: '4px 0', color: '#aaa', fontSize: '0.9rem' }}>{p.location} • {p.severity}</p>
+                                    <p style={{ margin: 0, color: '#666', fontSize: '0.8rem' }}>by User</p>
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                    <button onClick={() => handleApprove(p.id)} style={{ padding: '8px 16px', background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Approve</button>
+                                    <button onClick={() => handleReject(p.id)} style={{ padding: '8px 16px', background: '#333', color: '#ef4444', border: '1px solid #ef4444', borderRadius: '4px', cursor: 'pointer' }}>Reject</button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             <div className="glass-card" style={{ padding: '1rem' }}>
                 {loading ? (
                     <p style={{ color: '#888', textAlign: 'center' }}>Loading disasters...</p>
@@ -485,10 +584,22 @@ const DisastersTab = () => {
                                             <span style={{ fontSize: '0.8rem', color: '#aaa' }}>{item.assigned_volunteers_count || 0} / {item.volunteers_needed} Vols</span>
                                         </td>
                                         <td style={{ padding: '12px' }}>
-                                            <button onClick={() => startEdit(item)}
-                                                style={{ background: '#333', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}>
-                                                Edit
-                                            </button>
+                                            <div style={{ display: 'flex', gap: '8px' }}>
+                                                <button onClick={() => startEdit(item)}
+                                                    style={{ background: '#333', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}>
+                                                    Edit
+                                                </button>
+                                                {item.status !== 'completed' && (
+                                                    <button onClick={() => handleMarkComplete(item.id)}
+                                                        style={{ background: '#6366f1', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}>
+                                                        Complete
+                                                    </button>
+                                                )}
+                                                <button onClick={() => handleDelete(item.id)}
+                                                    style={{ background: '#ef4444', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}>
+                                                    Delete
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))
@@ -512,45 +623,87 @@ const DisastersTab = () => {
 const DonationsTab = () => {
     const [donations, setDonations] = useState([]);
     const [loading, setLoading] = useState(true);
+
+    // Removed aggressive auto-reload failsafe
     const [page, setPage] = useState(0);
     const [hasMore, setHasMore] = useState(true);
     const PER_PAGE = 20;
 
     useEffect(() => {
         fetchDonations(0);
+
+        const channel = supabase
+            .channel('realtime-donations')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'donations' },
+                () => {
+                    // Easier to re-fetch to get the foreign key data (disaster title) populated correctly
+                    // Optimistic updates are harder with joins without complex logic
+                    fetchDonations(0);
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }, []);
 
     const fetchDonations = async (pageNumber = 0) => {
-        setLoading(true);
-        const from = pageNumber * PER_PAGE;
-        const to = from + PER_PAGE - 1;
+        try {
+            setLoading(true);
+            const from = pageNumber * PER_PAGE;
+            const to = from + PER_PAGE - 1;
 
-        const { data, error } = await supabase
-            .from('donations')
-            .select(`
-                *,
-                disasters (title)
-            `)
-            .order('created_at', { ascending: false })
-            .range(from, to);
+            const { data, error } = await supabase
+                .from('donations')
+                .select(`
+                    *,
+                    disasters (title)
+                `)
+                .order('created_at', { ascending: false })
+                .range(from, to);
 
-        if (error) {
-            console.error("Error fetching donations:", error);
-        } else {
-            if (data.length < PER_PAGE) setHasMore(false);
+            if (error) {
+                console.error("Error fetching donations:", error);
+                // Fallback: If join failed, try fetching without join
+                if (error.code === 'PGRST200') { // Generic embedding error code often
+                    console.warn("Retrying without disaster join...");
+                    const { data: retryData, error: retryError } = await supabase
+                        .from('donations')
+                        .select('*')
+                        .order('created_at', { ascending: false })
+                        .range(from, to);
 
-            if (pageNumber === 0) {
-                setDonations(data || []);
+                    if (!retryError) {
+                        // Manually populate headers if needed or just show basic info
+                        processData(retryData, pageNumber);
+                        return;
+                    }
+                }
             } else {
-                // Eliminate duplicates just in case
-                setDonations(prev => {
-                    const existingIds = new Set(prev.map(d => d.id));
-                    const newItems = data.filter(d => !existingIds.has(d.id));
-                    return [...prev, ...newItems];
-                });
+                processData(data, pageNumber);
             }
+        } catch (err) {
+            console.error("Unexpected error fetching donations:", err);
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
+    };
+
+    const processData = (data, pageNumber) => {
+        if (data.length < PER_PAGE) setHasMore(false);
+
+        if (pageNumber === 0) {
+            setDonations(data || []);
+        } else {
+            setDonations(prev => {
+                const existingIds = new Set(prev.map(d => d.id));
+                const newItems = data.filter(d => !existingIds.has(d.id));
+                return [...prev, ...newItems];
+            });
+        }
     };
 
     const loadMore = () => {
@@ -669,6 +822,155 @@ const DonationsTab = () => {
                             Load More Donations
                         </button>
                     </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+const VolunteerApplicationsTab = () => {
+    const [applications, setApplications] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    // Removed aggressive auto-reload failsafe
+
+    useEffect(() => {
+        fetchApplications();
+
+        const channel = supabase
+            .channel('realtime-applications')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'volunteer_applications' },
+                () => fetchApplications()
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, []);
+
+    const fetchApplications = async () => {
+        setLoading(true);
+        try {
+            const { data, error } = await supabase
+                .from('volunteer_applications')
+                .select(`
+                    *,
+                    profiles (full_name, email, role)
+                `)
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                console.error(error);
+            } else {
+                setApplications(data || []);
+            }
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleAction = async (appId, status, userId) => {
+        try {
+            // 1. Update Application Status
+            const { error: appError } = await supabase
+                .from('volunteer_applications')
+                .update({ status })
+                .eq('id', appId);
+
+            if (appError) throw appError;
+
+            // 2. If Approved, Check Role and Update if necessary
+            if (status === 'approved') {
+                // Fetch current role first
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('role')
+                    .eq('id', userId)
+                    .single();
+
+                // Only upgrade to volunteer if they are NOT already an admin
+                if (profile?.role !== 'admin') {
+                    const { error: roleError } = await supabase
+                        .from('profiles')
+                        .update({ role: 'volunteer' })
+                        .eq('id', userId);
+
+                    if (roleError) throw roleError;
+                }
+            }
+
+            alert(`Application ${status}!`);
+            fetchApplications();
+        } catch (error) {
+            alert("Error: " + error.message);
+        }
+    };
+
+    return (
+        <div>
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '1.5rem' }}>Core Team Applications</h2>
+            <div className="glass-card" style={{ padding: '1rem' }}>
+                {loading ? (
+                    <p style={{ color: '#888', textAlign: 'center' }}>Loading applications...</p>
+                ) : (
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                            <tr style={{ borderBottom: '1px solid #333', color: '#888', textAlign: 'left' }}>
+                                <th style={{ padding: '12px' }}>Applicant</th>
+                                <th style={{ padding: '12px' }}>Skills</th>
+                                <th style={{ padding: '12px' }}>Motivation</th>
+                                <th style={{ padding: '12px' }}>Availability</th>
+                                <th style={{ padding: '12px' }}>Status</th>
+                                <th style={{ padding: '12px' }}>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {applications.length === 0 ? (
+                                <tr><td colSpan="6" style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>No pending applications.</td></tr>
+                            ) : (
+                                applications.map(app => (
+                                    <tr key={app.id} style={{ borderBottom: '1px solid #222' }}>
+                                        <td style={{ padding: '12px' }}>
+                                            <div style={{ fontWeight: 'bold', color: 'white' }}>{app.profiles?.full_name || 'Unknown'}</div>
+                                            <div style={{ fontSize: '0.8rem', color: '#aaa' }}>{app.profiles?.email}</div>
+                                            {app.profiles?.role === 'volunteer' && <div style={{ fontSize: '0.7rem', color: '#10b981' }}>(Already Volunteer)</div>}
+                                        </td>
+                                        <td style={{ padding: '12px', fontSize: '0.9rem', color: '#ccc' }}>{app.skills}</td>
+                                        <td style={{ padding: '12px', fontSize: '0.9rem', color: '#ccc' }}>{app.motivation}</td>
+                                        <td style={{ padding: '12px', fontSize: '0.9rem', color: '#ccc' }}>{app.availability}</td>
+                                        <td style={{ padding: '12px' }}>
+                                            <span style={{
+                                                padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem',
+                                                background: app.status === 'approved' ? 'rgba(16, 185, 129, 0.2)' : app.status === 'rejected' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(245, 158, 11, 0.2)',
+                                                color: app.status === 'approved' ? '#10b981' : app.status === 'rejected' ? '#ef4444' : '#f59e0b'
+                                            }}>
+                                                {app.status.toUpperCase()}
+                                            </span>
+                                        </td>
+                                        <td style={{ padding: '12px' }}>
+                                            {app.status === 'pending' && (
+                                                <div style={{ display: 'flex', gap: '8px' }}>
+                                                    <button onClick={() => handleAction(app.id, 'approved', app.user_id)}
+                                                        style={{ background: '#10b981', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}>
+                                                        Approve
+                                                    </button>
+                                                    <button onClick={() => handleAction(app.id, 'rejected', app.user_id)}
+                                                        style={{ background: '#333', color: '#ef4444', border: '1px solid #ef4444', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}>
+                                                        Reject
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
                 )}
             </div>
         </div>

@@ -1,10 +1,13 @@
 import { useEffect, useState, useRef } from 'react';
 import { supabase } from '../supabaseClient';
+import { useAuth } from '../context/AuthContext';
 import Navbar from '../components/Navbar';
 import { Link } from 'react-router-dom';
-import { MapPin, ArrowRight, Activity } from 'lucide-react';
+import { MapPin, ArrowRight, Activity, PlusCircle } from 'lucide-react';
 
 const DisastersFeed = () => {
+    const { user } = useAuth();
+    const [userRole, setUserRole] = useState(null);
     const [disasters, setDisasters] = useState([]);
     const [loading, setLoading] = useState(true);
     const [errorMsg, setErrorMsg] = useState(null);
@@ -22,6 +25,7 @@ const DisastersFeed = () => {
             const { data, error } = await supabase
                 .from('disasters')
                 .select('id, title, location, target_amount, collected_amount, image_url, is_urgent, created_at')
+                .eq('status', 'active') // Only show active
                 .order('created_at', { ascending: false })
                 .range(from, to);
 
@@ -44,9 +48,43 @@ const DisastersFeed = () => {
         }
     };
 
-    // 1. Initial Fetch
+    // Fetch User Role
+    useEffect(() => {
+        const fetchRole = async () => {
+            if (user) {
+                const { data } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+                if (data) setUserRole(data.role);
+            }
+        };
+        fetchRole();
+    }, [user]);
+
+    // 1. Initial Fetch & Realtime Subscription
     useEffect(() => {
         fetchDisasters(0);
+
+        const channel = supabase
+            .channel('realtime-disasters-feed')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'disasters' },
+                (payload) => {
+                    const { eventType, new: newRecord, old: oldRecord } = payload;
+
+                    if (eventType === 'INSERT') {
+                        setDisasters(prev => [newRecord, ...prev]);
+                    } else if (eventType === 'UPDATE') {
+                        setDisasters(prev => prev.map(d => d.id === newRecord.id ? newRecord : d));
+                    } else if (eventType === 'DELETE') {
+                        setDisasters(prev => prev.filter(d => d.id !== oldRecord.id));
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }, []);
 
     const loadMore = () => {
@@ -114,7 +152,7 @@ const DisastersFeed = () => {
                     textAlign: 'center',
                     width: '100%',
                     paddingBottom: '1rem',
-                    // Removed the borderBottom to make it look cleaner/less "boxy"
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem'
                 }}>
                     <h1 style={{
                         margin: 0,
@@ -126,6 +164,18 @@ const DisastersFeed = () => {
                         <Activity color="#ef4444" size={32} />
                         Active <span style={{ color: '#ef4444' }}>Relief Missions</span>
                     </h1>
+
+                    {userRole === 'volunteer' && (
+                        <Link to="/create-mission" style={{
+                            display: 'flex', alignItems: 'center', gap: '8px',
+                            background: 'rgba(16, 185, 129, 0.1)', color: '#10b981',
+                            padding: '10px 20px', borderRadius: '30px',
+                            border: '1px solid #10b981', textDecoration: 'none', fontWeight: '600',
+                            transition: 'all 0.2s'
+                        }}>
+                            <PlusCircle size={20} /> Launch New Mission
+                        </Link>
+                    )}
                 </div>
 
                 {/* Error State */}

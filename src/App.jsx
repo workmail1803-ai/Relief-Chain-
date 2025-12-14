@@ -9,7 +9,10 @@ import DisastersFeed from './pages/DisastersFeed';
 import DisasterDetail from './pages/DisasterDetail';
 import MedicalCases from './pages/MedicalCases';
 import MedicalDetail from './pages/MedicalDetail';
+import CreateMission from './pages/CreateMission';
 import Profile from './pages/Profile';
+import ApplyVolunteer from './pages/ApplyVolunteer';
+import VolunteerHub from './pages/VolunteerHub';
 import NotFound from './pages/NotFound';
 
 // Protected Route Component
@@ -54,6 +57,33 @@ function App() {
             element={
               <ProtectedRoute>
                 <Profile />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/volunteer-application"
+            element={
+              <ProtectedRoute>
+                <ApplyVolunteer />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/create-mission"
+            element={
+              <ProtectedRoute>
+                <CreateMission />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/volunteer-hub"
+            element={
+              <ProtectedRoute>
+                <VolunteerHub />
               </ProtectedRoute>
             }
           />
