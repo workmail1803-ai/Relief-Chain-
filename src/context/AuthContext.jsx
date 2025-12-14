@@ -23,24 +23,15 @@ export const AuthProvider = ({ children }) => {
                 .eq('id', userId)
                 .single();
 
-            if (error) {
-                console.error('Error fetching role:', error);
-                // Do not immediately revoke admin if it's a transient error, 
-                // but for security we usually default to false.
-                // However, to avoid flickering on transient errors, we might check if we already have admin.
-                // For now, let's keep it safe but log it.
-                setIsAdmin(false);
+            if (data?.role === 'admin') {
+                setIsAdmin(true);
             } else {
-                // Case-insensitive check
-                const role = data?.role?.toLowerCase();
-                setIsAdmin(role === 'admin');
+                setIsAdmin(false);
             }
         } catch (err) {
-            console.error('Unexpected error checking role:', err);
+            console.error('Error checking role:', err);
             setIsAdmin(false);
         }
-        // We do NOT set loading(false) here automatically anymore to prevent race conditions
-        // We let the caller handle the loading state finalization
     };
 
     useEffect(() => {

@@ -295,7 +295,6 @@ const DisastersTab = () => {
             volunteers_needed: disaster.volunteers_needed || 0,
             description: disaster.description || '',
             is_urgent: disaster.is_urgent,
-            is_urgent: disaster.is_urgent,
             image_url: disaster.image_url || '',
             gallery: disaster.gallery || [],
             bkash_number: disaster.bkash_number || ''

@@ -41,13 +41,19 @@ const Navbar = () => {
     };
 
     const markAsRead = async (id) => {
-        await supabase
+        // Delete notification for space efficiency as requested
+        const { error } = await supabase
             .from('notifications')
-            .update({ is_read: true })
+            .delete()
             .eq('id', id);
 
-        // Optimistic update
-        setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+        if (error) {
+            console.error("Error deleting notification:", error);
+            return;
+        }
+
+        // Remove from local state
+        setNotifications(prev => prev.filter(n => n.id !== id));
         setUnreadCount(prev => Math.max(0, prev - 1));
     };
 
