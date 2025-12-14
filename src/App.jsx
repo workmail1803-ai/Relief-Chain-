@@ -13,18 +13,30 @@ import CreateMission from './pages/CreateMission';
 import Profile from './pages/Profile';
 import ApplyVolunteer from './pages/ApplyVolunteer';
 import VolunteerHub from './pages/VolunteerHub';
+import VolunteerFeed from './pages/VolunteerFeed';
 import NotFound from './pages/NotFound';
 
 // Protected Route Component
-const ProtectedRoute = ({ children, requireAdmin = false }) => {
-  const { user, isAdmin } = useAuth();
+// Protected Route Component
+// Protected Route Component
+const ProtectedRoute = ({ children, allowedRoles = [] }) => {
+  const { user, isAdmin, isVolunteer } = useAuth();
 
   if (!user) {
     return <Navigate to="/login" replace />;
   }
 
-  if (requireAdmin && !isAdmin) {
-    return <Navigate to="/dashboard" replace />;
+  // If roles are specified, check if user has one of them
+  if (allowedRoles.length > 0) {
+    const hasRole = allowedRoles.some(role => {
+      if (role === 'admin') return isAdmin;
+      if (role === 'volunteer') return isVolunteer;
+      return false;
+    });
+
+    if (!hasRole) {
+      return <Navigate to="/dashboard" replace />;
+    }
   }
 
   return children;
@@ -82,8 +94,16 @@ function App() {
           <Route
             path="/volunteer-hub"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['volunteer', 'admin']}>
                 <VolunteerHub />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/volunteer-feed"
+            element={
+              <ProtectedRoute>
+                <VolunteerFeed />
               </ProtectedRoute>
             }
           />
@@ -109,7 +129,7 @@ function App() {
           <Route
             path="/admin-dashboard"
             element={
-              <ProtectedRoute requireAdmin={true}>
+              <ProtectedRoute allowedRoles={['admin']}>
                 <AdminDashboard />
               </ProtectedRoute>
             }

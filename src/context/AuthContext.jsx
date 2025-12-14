@@ -13,6 +13,7 @@ export const AuthProvider = ({ children }) => {
     const [session, setSession] = useState(null);
     const [loading, setLoading] = useState(true);
     const [isAdmin, setIsAdmin] = useState(false);
+    const [isVolunteer, setIsVolunteer] = useState(false);
 
     // Helper to check admin role and handle loading state
     // MODIFIED: Includes "Self-Healing" to fix missing profiles automatically
@@ -53,25 +54,27 @@ export const AuthProvider = ({ children }) => {
                             .eq('id', userId)
                             .single();
 
-                        if (retryData?.role === 'admin') setIsAdmin(true);
-                        else setIsAdmin(false);
+                        const role = retryData?.role;
+                        setIsAdmin(role === 'admin');
+                        setIsVolunteer(role === 'volunteer');
                         return;
                     }
                 } else {
                     console.error('Error checking role:', error);
                 }
                 setIsAdmin(false);
+                setIsVolunteer(false);
                 return;
             }
 
-            if (data?.role === 'admin') {
-                setIsAdmin(true);
-            } else {
-                setIsAdmin(false);
-            }
+            const role = data?.role;
+            setIsAdmin(role === 'admin');
+            setIsVolunteer(role === 'volunteer');
+
         } catch (err) {
             console.error('Unexpected error checking role:', err);
             setIsAdmin(false);
+            setIsVolunteer(false);
         }
     };
 
@@ -200,6 +203,7 @@ export const AuthProvider = ({ children }) => {
         user,
         session,
         isAdmin,
+        isVolunteer,
         login,
         signup,
         logout,
