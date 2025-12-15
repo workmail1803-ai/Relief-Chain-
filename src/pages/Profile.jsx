@@ -114,8 +114,8 @@ const Profile = () => {
             if (!file) return;
 
             const fileExt = file.name.split('.').pop();
-            const fileName = `${user.id} -${Math.random()}.${fileExt} `;
-            const filePath = `${fileName} `;
+            const fileName = `${user.id}-${Math.random()}.${fileExt}`;
+            const filePath = `${fileName}`;
 
             // 1. Upload to Storage
             const { error: uploadError } = await supabase.storage
