@@ -1,20 +1,28 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
+import { supabase } from '../supabaseClient';
 
 const Login = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
-    const { login, user } = useAuth();
+    // Get isAdmin and global auth loading state to handle auto-redirect correctly
+    const { login, user, isAdmin, loading: authLoading } = useAuth();
     const navigate = useNavigate();
 
+    // Auto-redirect for logged-in users
     useEffect(() => {
-        if (user) {
-            navigate('/dashboard');
+        // Wait for auth verification to complete before redirecting
+        if (!authLoading && user) {
+            if (isAdmin) {
+                navigate('/admin-dashboard');
+            } else {
+                navigate('/dashboard');
+            }
         }
-    }, [user, navigate]);
+    }, [user, isAdmin, authLoading, navigate]);
 
 
     const handleSubmit = async (e) => {
@@ -23,9 +31,23 @@ const Login = () => {
         setLoading(true);
 
         try {
-            const { error } = await login(email, password);
+            const { data: { user: authUser }, error } = await login(email, password);
             if (error) throw error;
-            navigate('/dashboard');
+
+            if (authUser) {
+                // Fetch profile to check role immediately for smoother UX
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('role')
+                    .eq('id', authUser.id)
+                    .single();
+
+                if (profile?.role === 'admin') {
+                    navigate('/admin-dashboard');
+                } else {
+                    navigate('/dashboard');
+                }
+            }
         } catch (err) {
             setError(err.message);
         } finally {

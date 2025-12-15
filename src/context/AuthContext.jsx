@@ -137,8 +137,13 @@ export const AuthProvider = ({ children }) => {
         };
     }, []);
 
-    const login = (email, password) => {
-        return supabase.auth.signInWithPassword({ email, password });
+    const login = async (email, password) => {
+        setLoading(true);
+        const result = await supabase.auth.signInWithPassword({ email, password });
+        if (result.error) {
+            setLoading(false);
+        }
+        return result;
     };
 
     const signup = async ({ email, password, fullName, phone, address }) => {
