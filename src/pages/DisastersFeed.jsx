@@ -3,6 +3,7 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
 // Navbar import removed
 import { Link } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { MapPin, ArrowRight, Activity, PlusCircle } from 'lucide-react';
 
 const DisastersFeed = () => {
@@ -111,7 +112,12 @@ const DisastersFeed = () => {
     }, [disasters]);
 
     return (
-        <div style={{ minHeight: '100vh', background: '#121212', fontFamily: 'Inter, sans-serif' }}>
+        <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            style={{ minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}
+        >
 
 
             {/* CSS Styles for Animations */}
@@ -345,7 +351,7 @@ const DisastersFeed = () => {
                     </>
                 )}
             </div>
-        </div>
+        </motion.div>
     );
 };
 

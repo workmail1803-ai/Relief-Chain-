@@ -7,7 +7,7 @@ const MedicalDetail = () => {
     const navigate = useNavigate();
 
     return (
-        <div style={{ minHeight: '100vh', background: '#1a1a1a', color: 'white' }}>
+        <div style={{ minHeight: '100vh', color: 'white' }}>
 
             <div style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto' }}>
                 <button onClick={() => navigate(-1)} style={{

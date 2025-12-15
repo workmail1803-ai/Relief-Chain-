@@ -35,7 +35,7 @@ const VolunteerFeed = () => {
     };
 
     return (
-        <div style={{ minHeight: '100vh', background: '#121212', fontFamily: 'Inter, sans-serif' }}>
+        <div style={{ minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
 
 
             <div style={{ maxWidth: '800px', margin: '0 auto', padding: '2rem' }}>

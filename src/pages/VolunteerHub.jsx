@@ -131,7 +131,7 @@ const VolunteerHub = () => {
     );
 
     return (
-        <div style={{ height: '100vh', background: '#121212', display: 'flex', flexDirection: 'column', fontFamily: 'Inter, sans-serif' }}>
+        <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', fontFamily: 'Inter, sans-serif' }}>
 
 
             <div style={{ flex: 1, display: 'flex', overflow: 'hidden', padding: '1rem', gap: '1rem', maxWidth: '1400px', margin: '0 auto', width: '100%' }}>

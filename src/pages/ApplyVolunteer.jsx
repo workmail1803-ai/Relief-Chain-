@@ -130,10 +130,10 @@ const ApplyVolunteer = () => {
         })
     };
 
-    if (authLoading) return <div className="min-h-screen bg-black text-white flex items-center justify-center">Loading...</div>;
+    if (authLoading) return <div className="min-h-screen text-white flex items-center justify-center">Loading...</div>;
 
     return (
-        <div style={{ minHeight: '100vh', background: '#0a0a0a', fontFamily: 'Inter, sans-serif', color: 'white' }}>
+        <div style={{ minHeight: '100vh', fontFamily: 'Inter, sans-serif', color: 'white' }}>
 
 
             <div style={{ maxWidth: '800px', margin: '4rem auto', padding: '2rem' }}>

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../supabaseClient';
-// Navbar import removed
 import { User, Mail, Heart, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 
 const Profile = () => {
     const { user, loading: authLoading } = useAuth();
@@ -32,15 +33,15 @@ const Profile = () => {
             fetchData();
 
             const channel = supabase
-                .channel(`profile-${user.id}`)
+                .channel(`profile - ${user.id} `)
                 .on(
                     'postgres_changes',
-                    { event: '*', schema: 'public', table: 'donations', filter: `user_id=eq.${user.id}` },
+                    { event: '*', schema: 'public', table: 'donations', filter: `user_id = eq.${user.id} ` },
                     () => fetchData()
                 )
                 .on(
                     'postgres_changes',
-                    { event: '*', schema: 'public', table: 'disaster_volunteers', filter: `user_id=eq.${user.id}` },
+                    { event: '*', schema: 'public', table: 'disaster_volunteers', filter: `user_id = eq.${user.id} ` },
                     () => fetchData()
                 )
                 .subscribe();
@@ -77,9 +78,9 @@ const Profile = () => {
             const { data: donationData, error: donationError } = await supabase
                 .from('donations')
                 .select(`
-                    *,
-                    disasters (title, image_url)
-                `)
+    *,
+    disasters(title, image_url)
+        `)
                 .eq('user_id', user.id)
                 .order('created_at', { ascending: false });
 
@@ -90,9 +91,9 @@ const Profile = () => {
             const { data: volData, error: volError } = await supabase
                 .from('disaster_volunteers')
                 .select(`
-                    *,
-                    disasters (title, location, image_url, severity)
-                `)
+    *,
+    disasters(title, location, image_url, severity)
+        `)
                 .eq('user_id', user.id)
                 .order('created_at', { ascending: false });
 
@@ -113,8 +114,8 @@ const Profile = () => {
             if (!file) return;
 
             const fileExt = file.name.split('.').pop();
-            const fileName = `${user.id}-${Math.random()}.${fileExt}`;
-            const filePath = `${fileName}`;
+            const fileName = `${user.id} -${Math.random()}.${fileExt} `;
+            const filePath = `${fileName} `;
 
             // 1. Upload to Storage
             const { error: uploadError } = await supabase.storage
@@ -155,15 +156,20 @@ const Profile = () => {
 
     if (loading) {
         return (
-            <div style={{ minHeight: '100vh', background: '#1a1a1a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <div className="spinner"></div>
-                <style>{`.spinner { width: 40px; height: 40px; border: 3px solid #333; border-top-color: #ef4444; border-radius: 50%; animation: spin 1s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                <style>{`.spinner { width: 40px; height: 40px; border: 3px solid #333; border - top - color: #ef4444; border - radius: 50 %; animation: spin 1s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } } `}</style>
             </div>
         );
     }
 
     return (
-        <div style={{ minHeight: '100vh', background: '#1a1a1a', fontFamily: 'Inter, sans-serif' }}>
+        <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            style={{ minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}
+        >
 
 
             <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '2rem' }}>
@@ -322,7 +328,7 @@ const Profile = () => {
                     </div>
                 </div>
             </div>
-        </div>
+        </motion.div>
     );
 };
 

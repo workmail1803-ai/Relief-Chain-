@@ -4,9 +4,9 @@ import Navbar from './Navbar';
 
 const Layout = () => {
     return (
-        <div style={{ minHeight: '100vh', background: '#1a1a1a', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', position: 'relative', overflowX: 'hidden' }}>
             <Navbar />
-            <div style={{ flex: 1, position: 'relative' }}>
+            <div style={{ flex: 1, position: 'relative', zIndex: 1 }}>
                 <Outlet />
             </div>
         </div>

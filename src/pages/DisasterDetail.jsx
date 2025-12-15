@@ -117,15 +117,15 @@ const DisasterDetail = () => {
         }
     };
 
-    if (loading) return <div style={{ background: '#1a1a1a', minHeight: '100vh', padding: '2rem', color: '#888' }}>Loading...</div>;
-    if (!disaster) return <div style={{ background: '#1a1a1a', minHeight: '100vh', padding: '2rem', color: 'white' }}>Disaster not found.</div>;
+    if (loading) return <div style={{ minHeight: '100vh', padding: '2rem', color: '#888' }}>Loading...</div>;
+    if (!disaster) return <div style={{ minHeight: '100vh', padding: '2rem', color: 'white' }}>Disaster not found.</div>;
 
     const percentFunded = Math.min(((disaster.collected_amount || 0) / disaster.target_amount) * 100, 100);
 
 
 
     return (
-        <div style={{ minHeight: '100vh', background: '#1a1a1a' }}>
+        <div style={{ minHeight: '100vh' }}>
 
             <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '2rem' }}>
                 <button onClick={() => navigate(-1)} style={{

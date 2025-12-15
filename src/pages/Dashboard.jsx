@@ -109,7 +109,7 @@ const Dashboard = () => {
     }, [user]);
 
     return (
-        <div style={{ minHeight: '100vh', background: '#1a1a1a' }}>
+        <div style={{ minHeight: '100vh', padding: '1rem' }}>
 
 
             <style>

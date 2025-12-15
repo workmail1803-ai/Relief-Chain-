@@ -1,15 +1,17 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../supabaseClient';
 import {
     User, Heart, AlertTriangle, Hand, Stethoscope, Users,
-    ShoppingBag, Info, FileText, Bell, LogOut, Check, X
+    ShoppingBag, Info, FileText, Bell, LogOut
 } from 'lucide-react';
+import { motion, LayoutGroup } from 'framer-motion';
 
 const Navbar = () => {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
+    const location = useLocation();
     const [notifications, setNotifications] = useState([]);
     const [showNotif, setShowNotif] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
@@ -25,7 +27,6 @@ const Navbar = () => {
             fetchNotifications();
             fetchUserRole();
 
-            // Realtime Subscription
             const channel = supabase
                 .channel('realtime-notifications')
                 .on(
@@ -40,12 +41,8 @@ const Navbar = () => {
                         if (payload.eventType === 'INSERT') {
                             setNotifications(prev => [payload.new, ...prev]);
                             setUnreadCount(prev => prev + 1);
-                            // Optional: Play sound or toast
                         } else if (payload.eventType === 'DELETE') {
                             setNotifications(prev => prev.filter(n => n.id !== payload.old.id));
-                            // Only decrement if it was unread (we can't know for sure without the old row data fully, 
-                            // strictly speaking DELETE payload.old only has ID for RLS policies sometimes, but let's assume safe)
-                            // A safer way is to re-fetch or just decrement safely:
                             fetchNotifications();
                         }
                     }
@@ -65,12 +62,8 @@ const Navbar = () => {
             .eq('id', user.id)
             .single();
 
-        if (error) {
-            // Ignore "no rows" error (PGRST116) as AuthContext might be healing it
-            // or it's a new user. Just don't set role yet.
-            if (error.code !== 'PGRST116') {
-                console.error("Error fetching user role:", error);
-            }
+        if (error && error.code !== 'PGRST116') {
+            console.error("Error fetching user role:", error);
             return;
         }
 
@@ -92,7 +85,6 @@ const Navbar = () => {
     };
 
     const markAsRead = async (id) => {
-        // Delete notification for space efficiency as requested
         const { error } = await supabase
             .from('notifications')
             .delete()
@@ -103,7 +95,6 @@ const Navbar = () => {
             return;
         }
 
-        // Remove from local state
         setNotifications(prev => prev.filter(n => n.id !== id));
         setUnreadCount(prev => Math.max(0, prev - 1));
     };
@@ -112,10 +103,6 @@ const Navbar = () => {
         if (notif.type !== 'invite' || !notif.meta_data?.disaster_id) return;
 
         try {
-            // Update volunteer status to 'joined' (assuming 'invited' status exists)
-            // Or just ensure they are inserted as 'joined' now if accepting
-
-            // 1. Update disaster_volunteers status
             const { error } = await supabase
                 .from('disaster_volunteers')
                 .update({ status: 'joined' })
@@ -134,59 +121,72 @@ const Navbar = () => {
         }
     };
 
+    // Helper Component for Nav Items
+    const NavItem = ({ to, icon: Icon, label, specialColor }) => {
+        const isActive = location.pathname === to;
+        return (
+            <Link to={to} className="nav-item" style={{ position: 'relative', padding: '8px 12px', color: isActive ? 'white' : (specialColor || '#ccc') }}>
+                {isActive && (
+                    <motion.div
+                        layoutId="active-nav-indicator"
+                        style={{
+                            position: 'absolute',
+                            inset: 0,
+                            borderRadius: '8px',
+                            background: 'rgba(99, 102, 241, 0.15)',
+                            border: '1px solid rgba(99, 102, 241, 0.3)',
+                            zIndex: -1
+                        }}
+                        transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                    />
+                )}
+                <Icon className="nav-icon" style={{ position: 'relative', zIndex: 1 }} />
+                <span style={{ position: 'relative', zIndex: 1 }}>{label}</span>
+            </Link>
+        );
+    };
+
     return (
-        <nav className="navbar animate-fade-in" style={{ position: 'relative', zIndex: 50 }}>
+        <nav className="navbar animate-fade-in" style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 50,
+            width: '100%',
+            background: 'rgba(0,0,0,0.5)',
+            backdropFilter: 'blur(10px)',
+            borderBottom: '1px solid rgba(255,255,255,0.1)'
+        }}>
             <Link to="/dashboard" className="nav-brand">
                 Relief Chain
             </Link>
 
             <div className="nav-links">
-                <Link to="/profile" className="nav-item">
-                    <User className="nav-icon" /> Profile
-                </Link>
-                <Link to="/donations" className="nav-item">
-                    <Heart className="nav-icon" /> Donate
-                </Link>
-                <Link to="/disasters" className="nav-item">
-                    <AlertTriangle className="nav-icon" /> Disasters
-                </Link>
-                <Link to="/volunteer" className="nav-item">
-                    <Hand className="nav-icon" /> Volunteer
-                </Link>
-                <Link to="/medical" className="nav-item">
-                    <Stethoscope className="nav-icon" /> Medical
-                </Link>
+                <LayoutGroup>
+                    <NavItem to="/profile" icon={User} label="Profile" />
+                    <NavItem to="/donations" icon={Heart} label="Donate" />
+                    <NavItem to="/disasters" icon={AlertTriangle} label="Disasters" />
+                    <NavItem to="/volunteer" icon={Hand} label="Volunteer" />
+                    <NavItem to="/medical" icon={Stethoscope} label="Medical" />
 
-                {userRole === 'volunteer' ? (
-                    <>
-                        <Link to="/create-mission" className="nav-item" style={{ color: '#10b981' }}>
-                            <AlertTriangle className="nav-icon" /> Lead Mission
-                        </Link>
-                        <Link to="/volunteer-hub" className="nav-item" style={{ color: '#6366f1' }}>
-                            <Users className="nav-icon" /> Team Hub
-                        </Link>
-                    </>
-                ) : (
-                    <Link to="/volunteer-application" className="nav-item" style={{ color: '#6366f1' }}>
-                        <Hand className="nav-icon" /> Join Core Team
-                    </Link>
-                )}
+                    {userRole === 'volunteer' ? (
+                        <>
+                            <NavItem to="/create-mission" icon={AlertTriangle} label="Lead Mission" specialColor="#10b981" />
+                            <NavItem to="/volunteer-hub" icon={Users} label="Team Hub" specialColor="#6366f1" />
+                        </>
+                    ) : (
+                        <NavItem to="/volunteer-application" icon={Hand} label="Join Core Team" specialColor="#6366f1" />
+                    )}
 
-                <Link to="/shop" className="nav-item">
-                    <ShoppingBag className="nav-icon" /> Shop
-                </Link>
-                <Link to="/about" className="nav-item">
-                    <Info className="nav-icon" /> About
-                </Link>
-                <Link to="/policy" className="nav-item">
-                    <FileText className="nav-icon" /> Policy
-                </Link>
+                    <NavItem to="/shop" icon={ShoppingBag} label="Shop" />
+                    <NavItem to="/about" icon={Info} label="About" />
+                    <NavItem to="/policy" icon={FileText} label="Policy" />
+                </LayoutGroup>
 
-                <div className="nav-item" style={{ position: 'relative', cursor: 'pointer' }} onClick={() => setShowNotif(!showNotif)}>
+                <div className="nav-item" style={{ position: 'relative', cursor: 'pointer', padding: '8px 12px' }} onClick={() => setShowNotif(!showNotif)}>
                     <Bell className="nav-icon" />
                     {unreadCount > 0 && (
                         <span style={{
-                            position: 'absolute', top: -5, right: -5,
+                            position: 'absolute', top: 0, right: 5,
                             background: '#ef4444', color: 'white',
                             fontSize: '10px', width: '16px', height: '16px',
                             borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center'
@@ -208,7 +208,7 @@ const Navbar = () => {
                             {notifications.length === 0 ? (
                                 <p style={{ color: '#666', fontSize: '0.9rem', textAlign: 'center' }}>No notifications</p>
                             ) : (
-                                notifications.map(n => (
+                                notifications.map(n => ( // Simplified mapping based on existing logic
                                     <div key={n.id} style={{
                                         padding: '8px', borderRadius: '6px',
                                         background: n.is_read ? 'transparent' : 'rgba(255,255,255,0.05)',
@@ -216,7 +216,7 @@ const Navbar = () => {
                                     }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
                                             <strong style={{ color: 'white', fontSize: '0.9rem' }}>{n.title}</strong>
-                                            {!n.is_read && <div style={{ w: 6, h: 6, bg: 'red', r: '50%' }} />}
+                                            {!n.is_read && <div style={{ width: 6, height: 6, background: '#ef4444', borderRadius: '50%' }} />}
                                         </div>
                                         <p style={{ color: '#aaa', fontSize: '0.8rem', margin: 0, marginBottom: '8px' }}>{n.message}</p>
 
@@ -226,7 +226,7 @@ const Navbar = () => {
                                                     style={{ flex: 1, background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '4px', fontSize: '0.8rem', cursor: 'pointer' }}>
                                                     Accept
                                                 </button>
-                                                <button onClick={() => markAsRead(n.id)} // Treat ignore as read for now
+                                                <button onClick={() => markAsRead(n.id)}
                                                     style={{ flex: 1, background: '#333', color: '#aaa', border: '1px solid #444', borderRadius: '4px', padding: '4px', fontSize: '0.8rem', cursor: 'pointer' }}>
                                                     Ignore
                                                 </button>
@@ -248,7 +248,7 @@ const Navbar = () => {
                 <button
                     onClick={handleLogout}
                     className="nav-item"
-                    style={{ background: 'transparent', border: 'none', padding: 0 }}
+                    style={{ background: 'transparent', border: 'none', padding: '8px 12px', cursor: 'pointer' }}
                 >
                     <LogOut className="nav-icon" style={{ color: '#ff4d4f' }} />
                 </button>
