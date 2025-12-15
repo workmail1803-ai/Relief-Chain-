@@ -8,7 +8,8 @@ const fallback = path.join(dist, '404.html');
 
 if (fs.existsSync(index)) {
     fs.copyFileSync(index, fallback);
-    console.log('✅ Copied index.html to 404.html for GitHub Pages SPA support');
+    fs.writeFileSync(path.join(dist, '.nojekyll'), '');
+    console.log('✅ Copied index.html to 404.html and created .nojekyll for GitHub Pages SPA support');
 } else {
     console.error('❌ dist/index.html not found!');
 }
