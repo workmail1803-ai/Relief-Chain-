@@ -92,8 +92,8 @@ const CreateMission = () => {
                 description: formData.description,
                 is_urgent: formData.is_urgent,
                 image_url: formData.image_url,
-                status: 'pending',
-                created_by: user.id
+                status: 'pending'
+                // Note: created_by column doesn't exist in schema, removed to prevent error
             };
 
             let table = '';

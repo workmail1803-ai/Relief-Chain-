@@ -1,6 +1,7 @@
 /**
  * AdminDashboard View - Admin control panel
  * This is a View in the MVC architecture
+ * Follows MVC pattern - uses controllers for business logic
  */
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -10,10 +11,20 @@ import { compressImage } from '../utils/imageUtils';
 import UsersAndVolunteersTab from '../components/UsersAndVolunteersTab';
 import {
     LayoutDashboard, AlertTriangle, Stethoscope, Users,
-    ShoppingBag, DollarSign, LogOut, Plus, Search, FileText
+    ShoppingBag, DollarSign, LogOut, Plus, Search, FileText,
+    TrendingUp, Clock, Activity, Heart
 } from 'lucide-react';
 
 import AdminShop from './AdminShop';
+
+// Import controllers for MVC pattern
+import {
+    useAdminOverviewController
+} from '../controllers/useAdminDashboardController';
+
+// Import models for direct data operations where needed
+import * as disasterModel from '../models/disasterModel';
+import * as medicalModel from '../models/medicalModel';
 
 const AdminDashboard = () => {
     const { logout } = useAuth();
@@ -166,19 +177,161 @@ const SidebarItem = ({ icon, label, active, onClick }) => (
     </button>
 );
 
-const OverviewTab = () => (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem' }}>
-        <StatCard title="Total Donations" value="$1.2M" color="#10b981" />
-        <StatCard title="Active Volunteers" value="3,450" color="#6366f1" />
-        <StatCard title="Active Disasters" value="12" color="#f59e0b" />
-        <StatCard title="Pending Verifications" value="45" color="#ef4444" />
+const OverviewTab = () => {
+    // Use the admin overview controller for stats
+    const { stats, recentActivity, loading } = useAdminOverviewController();
+
+    return (
+        <div>
+            {/* Main Stats Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
+                <StatCard
+                    title="Total Donations"
+                    value={`৳${stats.totalDonations.toLocaleString()}`}
+                    color="#10b981"
+                    icon={<TrendingUp size={20} />}
+                    loading={loading}
+                />
+                <StatCard
+                    title="Active Volunteers"
+                    value={stats.activeVolunteers.toLocaleString()}
+                    color="#6366f1"
+                    icon={<Users size={20} />}
+                    loading={loading}
+                />
+                <StatCard
+                    title="Active Disasters"
+                    value={stats.activeDisasters.toString()}
+                    color="#f59e0b"
+                    icon={<AlertTriangle size={20} />}
+                    loading={loading}
+                />
+                <StatCard
+                    title="Medical Cases"
+                    value={stats.activeMedicalCases.toString()}
+                    color="#ef4444"
+                    icon={<Heart size={20} />}
+                    loading={loading}
+                />
+            </div>
+
+            {/* Pending Items Row */}
+            <h3 style={{ color: '#888', fontSize: '1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Clock size={18} /> Pending Actions
+            </h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+                <PendingCard
+                    title="Pending Donations"
+                    value={stats.pendingDonations}
+                    color="#f59e0b"
+                    loading={loading}
+                />
+                <PendingCard
+                    title="Pending Applications"
+                    value={stats.pendingApplications}
+                    color="#8b5cf6"
+                    loading={loading}
+                />
+                <PendingCard
+                    title="Pending Disasters"
+                    value={stats.pendingDisasters}
+                    color="#f97316"
+                    loading={loading}
+                />
+                <PendingCard
+                    title="Pending Medical"
+                    value={stats.pendingMedicalCases}
+                    color="#ec4899"
+                    loading={loading}
+                />
+            </div>
+
+            {/* Recent Activity */}
+            <h3 style={{ color: '#888', fontSize: '1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Activity size={18} /> Recent Donations
+            </h3>
+            <div className="glass-card" style={{ padding: '1rem' }}>
+                {loading ? (
+                    <p style={{ color: '#888', textAlign: 'center' }}>Loading recent activity...</p>
+                ) : recentActivity.length === 0 ? (
+                    <p style={{ color: '#666', textAlign: 'center' }}>No recent donations</p>
+                ) : (
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                            <tr style={{ borderBottom: '1px solid #333', color: '#888', textAlign: 'left' }}>
+                                <th style={{ padding: '8px' }}>Date</th>
+                                <th style={{ padding: '8px' }}>Disaster</th>
+                                <th style={{ padding: '8px' }}>Amount</th>
+                                <th style={{ padding: '8px' }}>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {recentActivity.map(donation => (
+                                <tr key={donation.id} style={{ borderBottom: '1px solid #222' }}>
+                                    <td style={{ padding: '8px', color: '#aaa', fontSize: '0.9rem' }}>
+                                        {new Date(donation.created_at).toLocaleDateString()}
+                                    </td>
+                                    <td style={{ padding: '8px' }}>
+                                        {donation.disasters?.title || 'General Fund'}
+                                    </td>
+                                    <td style={{ padding: '8px', color: '#10b981', fontWeight: 'bold' }}>
+                                        ৳{donation.amount}
+                                    </td>
+                                    <td style={{ padding: '8px' }}>
+                                        <span style={{
+                                            padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem',
+                                            background: donation.status === 'approved' ? 'rgba(16, 185, 129, 0.2)' :
+                                                donation.status === 'rejected' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(245, 158, 11, 0.2)',
+                                            color: donation.status === 'approved' ? '#10b981' :
+                                                donation.status === 'rejected' ? '#ef4444' : '#f59e0b'
+                                        }}>
+                                            {donation.status?.toUpperCase()}
+                                        </span>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                )}
+            </div>
+        </div>
+    );
+};
+
+// Enhanced StatCard with loading state and icon
+const StatCard = ({ title, value, color, icon, loading = false }) => (
+    <div className="glass-card" style={{ padding: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+            <h3 style={{ color: '#888', fontSize: '0.9rem', margin: 0 }}>{title}</h3>
+            {icon && <span style={{ color: color, opacity: 0.7 }}>{icon}</span>}
+        </div>
+        <p style={{ fontSize: '2rem', fontWeight: 'bold', color: color, margin: 0 }}>
+            {loading ? (
+                <span style={{ opacity: 0.5 }}>...</span>
+            ) : value}
+        </p>
     </div>
 );
 
-const StatCard = ({ title, value, color }) => (
-    <div className="glass-card" style={{ padding: '1.5rem' }}>
-        <h3 style={{ color: '#888', fontSize: '0.9rem', marginBottom: '0.5rem' }}>{title}</h3>
-        <p style={{ fontSize: '2rem', fontWeight: 'bold', color: color, margin: 0 }}>{value}</p>
+// Compact card for pending items
+const PendingCard = ({ title, value, color, loading = false }) => (
+    <div className="glass-card" style={{
+        padding: '1rem',
+        borderLeft: `3px solid ${color}`,
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center'
+    }}>
+        <span style={{ color: '#aaa', fontSize: '0.85rem' }}>{title}</span>
+        <span style={{
+            fontSize: '1.5rem',
+            fontWeight: 'bold',
+            color: value > 0 ? color : '#666',
+            minWidth: '40px',
+            textAlign: 'right'
+        }}>
+            {loading ? '...' : value}
+        </span>
     </div>
 );
 

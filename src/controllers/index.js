@@ -13,3 +13,11 @@ export { useNotificationsController } from './useNotificationsController';
 export { useDonationsController, useUserDonations } from './useDonationsController';
 export { useDashboardController } from './useDashboardController';
 export { useProfileController } from './useProfileController';
+export {
+    useAdminOverviewController,
+    useAdminDisastersController,
+    useAdminMedicalController,
+    useAdminDonationsController,
+    useAdminVolunteerApplicationsController,
+    useAdminFundsController
+} from './useAdminDashboardController';
