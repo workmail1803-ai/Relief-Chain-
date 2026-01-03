@@ -52,7 +52,9 @@ const Checkout = () => {
                     return; // Stop checkout
                 }
 
-                const { error: updateError } = await productModel.updateProductStock(item.id, product.stock - item.quantity);
+                // Explicitly parse numbers to avoid string concatenation or type errors
+                const newStock = parseInt(product.stock, 10) - parseInt(item.quantity, 10);
+                const { error: updateError } = await productModel.updateProductStock(item.id, newStock);
 
                 if (updateError) {
                     console.error(`Error updating stock for ${item.name}`, updateError);

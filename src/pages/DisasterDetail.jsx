@@ -19,6 +19,7 @@ const DisasterDetail = () => {
     const [showDonationModal, setShowDonationModal] = useState(false);
     const [isVolunteer, setIsVolunteer] = useState(false); // Track status
     const [volunteerLoading, setVolunteerLoading] = useState(false);
+    const [donateAmount, setDonateAmount] = useState('');
 
     const fetchDisasterData = async () => {
         // 1. Fetch Disaster Details
@@ -303,12 +304,17 @@ const DisasterDetail = () => {
                         <form onSubmit={async (e) => {
                             e.preventDefault();
                             const formData = new FormData(e.target);
-                            const amountStr = formData.get('amount');
                             const phoneLast4 = formData.get('phone_last_4');
 
-                            if (!amountStr || !phoneLast4) return alert("Please fill all fields");
+                            if (!donateAmount || !phoneLast4) return alert("Please fill all fields");
 
-                            const amount = parseFloat(amountStr);
+                            const amount = parseFloat(donateAmount);
+                            const remaining = disaster.target_amount - (disaster.collected_amount || 0);
+
+                            if (amount > remaining) {
+                                alert(`Donation cannot exceed the remaining allowed amount of ৳${remaining}`);
+                                return;
+                            }
 
                             // Get current user
                             const { data: { user } } = await supabase.auth.getUser();
@@ -329,13 +335,26 @@ const DisasterDetail = () => {
                             } else {
                                 alert("Donation submitted for verification! Thank you.");
                                 setShowDonationModal(false);
+                                setDonateAmount('');
                             }
                         }} style={{ display: 'flex', flexDirection: 'column', gap: '12px', textAlign: 'left' }}>
 
                             <div>
                                 <label style={{ color: '#ccc', fontSize: '0.9rem', display: 'block', marginBottom: '4px' }}>Amount Sent (৳)</label>
-                                <input name="amount" type="number" placeholder="e.g. 500" required
-                                    style={{ width: '100%', padding: '10px', background: '#333', border: '1px solid #444', color: 'white', borderRadius: '6px' }} />
+                                <input
+                                    name="amount"
+                                    type="number"
+                                    placeholder="e.g. 500"
+                                    required
+                                    value={donateAmount}
+                                    onChange={(e) => setDonateAmount(e.target.value)}
+                                    style={{ width: '100%', padding: '10px', background: '#333', border: '1px solid #444', color: 'white', borderRadius: '6px' }}
+                                />
+                                {disaster && (disaster.target_amount - (disaster.collected_amount || 0) < parseFloat(donateAmount || 0)) && (
+                                    <p style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '4px' }}>
+                                        Exceeds remaining goal of ৳{disaster.target_amount - (disaster.collected_amount || 0)}
+                                    </p>
+                                )}
                             </div>
 
                             <div>
@@ -350,7 +369,12 @@ const DisasterDetail = () => {
                                     Cancel
                                 </button>
                                 <button type="submit"
-                                    style={{ flex: 1, padding: '12px', background: '#e2136e', border: 'none', color: 'white', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+                                    disabled={disaster && (disaster.target_amount - (disaster.collected_amount || 0) < parseFloat(donateAmount || 0))}
+                                    style={{
+                                        flex: 1, padding: '12px',
+                                        background: '#e2136e', border: 'none', color: 'white', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold',
+                                        opacity: (disaster && (disaster.target_amount - (disaster.collected_amount || 0) < parseFloat(donateAmount || 0))) ? 0.5 : 1
+                                    }}>
                                     Confirm Donation
                                 </button>
                             </div>

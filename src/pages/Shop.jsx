@@ -4,6 +4,7 @@
  */
 import { useState, useEffect } from 'react';
 import { fetchProducts } from '../models/productModel';
+import { supabase } from '../supabaseClient';
 import ProductCard from '../components/ProductCard';
 import { ShoppingBag, Search, Filter } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -16,6 +17,17 @@ const Shop = () => {
 
     useEffect(() => {
         fetchProductsData();
+
+        const channel = supabase
+            .channel('shop-realtime')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
+                fetchProductsData();
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }, []);
 
     const fetchProductsData = async () => {

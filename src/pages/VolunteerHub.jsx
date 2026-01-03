@@ -5,6 +5,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import { useLocation } from 'react-router-dom';
 // Navbar import removed
 import { User, Send, Search, MessageSquare } from 'lucide-react';
 
@@ -28,7 +29,7 @@ const VolunteerHub = () => {
             const { data, error } = await supabase
                 .from('profiles')
                 .select('*')
-                .eq('role', 'volunteer')
+                .in('role', ['volunteer', 'admin']) // Allow chatting with Admins too
                 .neq('id', user.id);
 
             if (!error) setVolunteers(data || []);
@@ -36,6 +37,30 @@ const VolunteerHub = () => {
         };
         fetchVolunteers();
     }, [user]);
+
+    // Handle navigation from Notification (Auto-select user)
+    // We use the useLocation hook, but it's not imported. 
+    // Wait, I need to Import useLocation first. 
+    // But I can't check imports with this tool easily without viewing top.
+    // I recall `useLocation` is NOT imported.
+    // I will add the logic inside useEffect and assume I will fix imports in next step or use window.history.state? 
+    // No, standard is useLocation. 
+    // I'll add the check for state here.
+    const location = useLocation();
+
+    // Handle navigation from Notification (Auto-select user)
+    useEffect(() => {
+        if (location.state?.selectedUserId && volunteers.length > 0) {
+            const targetUser = volunteers.find(v => v.id === location.state.selectedUserId);
+            if (targetUser) {
+                setSelectedVolunteer(targetUser);
+                // Clear state to prevent re-selection on refresh? Optional.
+            } else {
+                // Optimization: If user is not in list (maybe new admin?), fetch individually?
+                // For now, robust list fetching ensures admins are there.
+            }
+        }
+    }, [location.state, volunteers]);
 
     // 2. Fetch Messages when a user is selected
     useEffect(() => {
@@ -126,7 +151,17 @@ const VolunteerHub = () => {
             setMessages(prev => prev.filter(m => m.id !== optimisticMsg.id));
         } else {
             // Replace temp message with real one (to get real ID/timestamp if needed)
+            // Replace temp message with real one (to get real ID/timestamp if needed)
             setMessages(prev => prev.map(m => m.id === optimisticMsg.id ? data : m));
+
+            // Notify Receiver (Bug 5)
+            await supabase.from('notifications').insert([{
+                user_id: selectedVolunteer.id,
+                content: 'New message from ' + (user.email || 'Team Member'),
+                is_read: false,
+                type: 'message',
+                meta_data: { sender_id: user.id }
+            }]);
         }
     };
 

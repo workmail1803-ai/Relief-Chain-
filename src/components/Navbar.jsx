@@ -153,6 +153,16 @@ const Navbar = () => {
         );
     };
 
+    const handleNotificationClick = async (n) => {
+        if (n.type === 'message') {
+            // Navigate to chat
+            // We need to know who sent it. meta_data.sender_id
+            if (n.meta_data?.sender_id) {
+                navigate('/volunteer-hub', { state: { selectedUserId: n.meta_data.sender_id } });
+            }
+        }
+    };
+
     return (
         <>
             <nav className="navbar animate-fade-in" style={{
@@ -235,11 +245,14 @@ const Navbar = () => {
                                     <p style={{ color: '#666', fontSize: '0.9rem', textAlign: 'center' }}>No notifications</p>
                                 ) : (
                                     notifications.map(n => ( // Simplified mapping based on existing logic
-                                        <div key={n.id} style={{
-                                            padding: '8px', borderRadius: '6px',
-                                            background: n.is_read ? 'transparent' : 'rgba(255,255,255,0.05)',
-                                            border: '1px solid #333'
-                                        }}>
+                                        <div key={n.id}
+                                            onClick={() => handleNotificationClick(n)}
+                                            style={{
+                                                padding: '8px', borderRadius: '6px',
+                                                background: n.is_read ? 'transparent' : 'rgba(255,255,255,0.05)',
+                                                border: '1px solid #333',
+                                                cursor: n.type === 'message' ? 'pointer' : 'default'
+                                            }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
                                                 <strong style={{ color: 'white', fontSize: '0.9rem' }}>{n.title}</strong>
                                                 {!n.is_read && <div style={{ width: 6, height: 6, background: '#ef4444', borderRadius: '50%' }} />}

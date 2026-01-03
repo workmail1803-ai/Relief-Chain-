@@ -103,7 +103,8 @@ const CreateMission = () => {
                 table = 'disasters';
                 payload = {
                     ...commonData,
-                    location: formData.location
+                    location: formData.location,
+                    bkash_number: formData.bkash_number
                 };
             } else {
                 table = 'medical_cases';
@@ -361,21 +362,19 @@ const CreateMission = () => {
                                         <Users size={20} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#666' }} />
                                     </div>
                                 </div>
-                                {missionType === 'medical' && (
-                                    <div>
-                                        <label style={{ display: 'block', color: '#888', marginBottom: '8px', fontSize: '0.9rem', fontWeight: '500' }}>BKASH NUMBER (Personal/Agent)</label>
-                                        <div style={{ position: 'relative' }}>
-                                            <input
-                                                type="text"
-                                                name="bkash_number"
-                                                value={formData.bkash_number}
-                                                onChange={handleChange}
-                                                placeholder="017xxxxxxxx"
-                                                style={{ width: '100%', padding: '16px 16px 16px 16px', background: '#1a1a1a', border: '1px solid #333', borderRadius: '12px', color: 'white', fontSize: '1rem', outline: 'none', boxSizing: 'border-box' }}
-                                            />
-                                        </div>
+                                <div>
+                                    <label style={{ display: 'block', color: '#888', marginBottom: '8px', fontSize: '0.9rem', fontWeight: '500' }}>BKASH NUMBER (Personal/Agent)</label>
+                                    <div style={{ position: 'relative' }}>
+                                        <input
+                                            type="text"
+                                            name="bkash_number"
+                                            value={formData.bkash_number}
+                                            onChange={handleChange}
+                                            placeholder="017xxxxxxxx"
+                                            style={{ width: '100%', padding: '16px 16px 16px 16px', background: '#1a1a1a', border: '1px solid #333', borderRadius: '12px', color: 'white', fontSize: '1rem', outline: 'none', boxSizing: 'border-box' }}
+                                        />
                                     </div>
-                                )}
+                                </div>
                             </div>
                         </motion.div>
 
@@ -453,8 +452,8 @@ const CreateMission = () => {
                         </div>
                     </motion.div>
                 </motion.form>
-            </div>
-        </div>
+            </div >
+        </div >
     );
 };
 

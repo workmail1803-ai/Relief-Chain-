@@ -266,7 +266,7 @@ const Profile = () => {
                                         </div>
 
                                         <div style={{ flex: 1 }}>
-                                            <h3 style={{ color: 'white', fontSize: '1.1rem', margin: '0 0 4px 0' }}>{donation.disasters?.title || 'Unknown Campaign'}</h3>
+                                            <h3 style={{ color: 'white', fontSize: '1.1rem', margin: '0 0 4px 0' }}>{donation.disasters?.title || (donation.donation_type === 'medical' ? 'Medical Donation' : 'General Donation')}</h3>
                                             <p style={{ color: '#888', fontSize: '0.85rem', margin: 0 }}>
                                                 {new Date(donation.created_at).toLocaleDateString()} at {new Date(donation.created_at).toLocaleTimeString()}
                                             </p>

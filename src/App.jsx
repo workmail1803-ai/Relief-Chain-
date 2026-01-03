@@ -31,6 +31,8 @@ import VolunteerHub from './pages/VolunteerHub';
 import VolunteerFeed from './pages/VolunteerFeed';
 import NotFound from './pages/NotFound';
 import Donations from './pages/Donations';
+import About from './pages/About';
+import Policy from './pages/Policy';
 
 // Protected Route Component
 const ProtectedRoute = ({ children, allowedRoles = [] }) => {
@@ -181,6 +183,12 @@ function App() {
                   </ProtectedRoute>
                 }
               />
+
+
+              {/* Public/General Routes inside Layout */}
+              <Route path="/about" element={<About />} />
+              <Route path="/policy" element={<Policy />} />
+
             </Route>
 
             <Route

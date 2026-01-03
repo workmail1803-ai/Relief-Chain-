@@ -16,6 +16,7 @@ const MedicalDetail = () => {
     const [loading, setLoading] = useState(true);
     const [lightboxImage, setLightboxImage] = useState(null);
     const [showDonationModal, setShowDonationModal] = useState(false);
+    const [donateAmount, setDonateAmount] = useState('');
 
     useEffect(() => {
         const fetchCaseData = async () => {
@@ -223,40 +224,63 @@ const MedicalDetail = () => {
                         <form onSubmit={async (e) => {
                             e.preventDefault();
                             const formData = new FormData(e.target);
-                            const amountStr = formData.get('amount');
                             const phoneLast4 = formData.get('phone_last_4');
 
-                            if (!amountStr || !phoneLast4) return alert("Please fill all fields");
+                            if (!donateAmount || !phoneLast4) return alert("Please fill all fields");
 
-                            const amount = parseFloat(amountStr);
+                            const amount = parseFloat(donateAmount);
+                            const remaining = medicalCase.target_amount - (medicalCase.collected_amount || 0);
+
+                            if (amount > remaining) {
+                                alert(`Donation cannot exceed the remaining allowed amount of ৳${remaining}`);
+                                return;
+                            }
 
                             // Get current user
                             const { data: { user } } = await supabase.auth.getUser();
+                            if (!user) return alert("Please login to donate");
 
-                            // Use donations table, but we might need a medical_case_id support in donations table?
-                            // CAREFUL: The donations table probably links to 'disaster_id'.
-                            // If I use the same donations table, I need to add 'medical_case_id' column to it as well!
-                            // OR I can use the existing disaster_id if I treat this loosely? No, that breaks FK.
-                            // I MUST check donations schema. 
-                            // For now, I'll alert the user that this part needs DB update or I'll implement a workaround.
-                            // Actually, I can INSERT into 'donations' but I need to know the schema.
-                            // I'll assume I need to add 'medical_case_id' to `donations` table.
-                            // Since I cannot run SQL myself easily without user, I will skip the INSERT for now and just show Success Alert purely client side for demo
-                            // OR I can try to INSERT and catch error.
-                            // Let's assume standard 'donations' for now only has 'disaster_id'.
-                            // I should probably have updated 'donations' table in the SQL script. I missed that.
-                            // Workaround: I will just simulate the success for now to unblock the UI.
+                            // Real Insert (Bug 1 Fix)
+                            const { error } = await supabase
+                                .from('donations')
+                                .insert([{
+                                    user_id: user.id,
+                                    amount: amount,
+                                    payment_method: 'bkash',
+                                    phone_last_4: phoneLast4,
+                                    status: 'pending',
+                                    transaction_id: `MEDICAL:${medicalCase.id}`, // Link to medical case
+                                    donation_type: 'medical',
+                                    disaster_id: null
+                                }]);
 
-
-                            alert(`Thank you! Your donation of ৳${amount} for ${medicalCase.patient_name} has been noted. (Simulated)`);
-                            setShowDonationModal(false);
+                            if (error) {
+                                console.error(error);
+                                alert("Error: " + error.message);
+                            } else {
+                                alert(`Thank you! Your donation of ৳${amount} for ${medicalCase.patient_name} has been recorded.`);
+                                setShowDonationModal(false);
+                                setDonateAmount('');
+                            }
 
                         }} style={{ display: 'flex', flexDirection: 'column', gap: '12px', textAlign: 'left' }}>
 
                             <div>
                                 <label style={{ color: '#ccc', fontSize: '0.9rem', display: 'block', marginBottom: '4px' }}>Amount Sent (৳)</label>
-                                <input name="amount" type="number" placeholder="e.g. 500" required
-                                    style={{ width: '100%', padding: '10px', background: '#333', border: '1px solid #444', color: 'white', borderRadius: '6px' }} />
+                                <input
+                                    name="amount"
+                                    type="number"
+                                    placeholder="e.g. 500"
+                                    required
+                                    value={donateAmount}
+                                    onChange={(e) => setDonateAmount(e.target.value)}
+                                    style={{ width: '100%', padding: '10px', background: '#333', border: '1px solid #444', color: 'white', borderRadius: '6px' }}
+                                />
+                                {medicalCase && (medicalCase.target_amount - (medicalCase.collected_amount || 0) < parseFloat(donateAmount || 0)) && (
+                                    <p style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '4px' }}>
+                                        Exceeds remaining goal of ৳{medicalCase.target_amount - (medicalCase.collected_amount || 0)}
+                                    </p>
+                                )}
                             </div>
 
                             <div>
@@ -271,7 +295,12 @@ const MedicalDetail = () => {
                                     Cancel
                                 </button>
                                 <button type="submit"
-                                    style={{ flex: 1, padding: '12px', background: '#e2136e', border: 'none', color: 'white', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+                                    disabled={medicalCase && (medicalCase.target_amount - (medicalCase.collected_amount || 0) < parseFloat(donateAmount || 0))}
+                                    style={{
+                                        flex: 1, padding: '12px',
+                                        background: '#e2136e', border: 'none', color: 'white', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold',
+                                        opacity: (medicalCase && (medicalCase.target_amount - (medicalCase.collected_amount || 0) < parseFloat(donateAmount || 0))) ? 0.5 : 1
+                                    }}>
                                     Confirm Donation
                                 </button>
                             </div>

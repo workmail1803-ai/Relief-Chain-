@@ -543,13 +543,22 @@ const DisastersTab = () => {
     const handleDelete = async (id) => {
         if (!window.confirm("Are you sure you want to delete this disaster? This action cannot be undone.")) return;
 
-        const { error } = await supabase
-            .from('disasters')
-            .delete()
-            .eq('id', id);
+        try {
+            // Delete dependent records first (Simulating CASCADE)
+            await supabase.from('donations').delete().eq('disaster_id', id);
+            await supabase.from('disaster_volunteers').delete().eq('disaster_id', id);
+            // Optionally delete notifications/messages if linked to disaster (schema doesn't imply strong link mostly)
 
-        if (error) alert("Error deleting: " + error.message);
-        else fetchDisasters();
+            const { error } = await supabase
+                .from('disasters')
+                .delete()
+                .eq('id', id);
+
+            if (error) throw error;
+            fetchDisasters();
+        } catch (error) {
+            alert("Error deleting: " + error.message);
+        }
     };
 
     const handleMarkComplete = async (id) => {
@@ -632,6 +641,13 @@ const DisastersTab = () => {
                                 <input name="target_amount" type="number" value={formData.target_amount} onChange={handleInteract}
                                     style={{ width: '100%', padding: '10px', background: '#222', border: '1px solid #333', color: 'white', borderRadius: '6px' }} />
                             </div>
+                        </div>
+
+                        {/* Added bKash Number Field */}
+                        <div>
+                            <label style={{ display: 'block', marginBottom: '8px', color: '#aaa' }}>bKash Number (Agent/Personal)</label>
+                            <input name="bkash_number" value={formData.bkash_number} onChange={handleInteract} placeholder="e.g. 017xxxxxxxx"
+                                style={{ width: '100%', padding: '10px', background: '#222', border: '1px solid #333', color: 'white', borderRadius: '6px' }} />
                         </div>
 
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
@@ -873,36 +889,58 @@ const DonationsTab = () => {
         fetchDonations(nextPage);
     };
 
-    const handleApproval = async (donationId, status, disasterId, amount) => {
+    const handleApproval = async (donation, status) => {
         try {
             // 1. Update Donation Status
             const { error: updateError } = await supabase
                 .from('donations')
                 .update({ status })
-                .eq('id', donationId);
+                .eq('id', donation.id);
 
             if (updateError) throw updateError;
 
-            // 2. If Approved, update Disaster Funds
+            // 2. If Approved, update Funds
             if (status === 'approved') {
-                // Fetch current amount first to be safe, or use RPC content if concurrency is high. 
-                // For valid prototype: read -> calculate -> update
-                const { data: disasterData, error: fetchError } = await supabase
-                    .from('disasters')
-                    .select('collected_amount')
-                    .eq('id', disasterId)
-                    .single();
+                const amount = parseFloat(donation.amount);
 
-                if (fetchError) throw fetchError;
+                if (donation.disaster_id) {
+                    // Update Disaster Funds
+                    const { data: disasterData, error: fetchError } = await supabase
+                        .from('disasters')
+                        .select('collected_amount')
+                        .eq('id', donation.disaster_id)
+                        .single();
 
-                const newAmount = (disasterData.collected_amount || 0) + parseFloat(amount);
+                    if (fetchError) throw fetchError;
 
-                const { error: fundError } = await supabase
-                    .from('disasters')
-                    .update({ collected_amount: newAmount })
-                    .eq('id', disasterId);
+                    const newAmount = (disasterData.collected_amount || 0) + amount;
+                    const { error: fundError } = await supabase
+                        .from('disasters')
+                        .update({ collected_amount: newAmount })
+                        .eq('id', donation.disaster_id);
 
-                if (fundError) throw fundError;
+                    if (fundError) throw fundError;
+
+                } else if (donation.donation_type === 'medical' || (donation.transaction_id && donation.transaction_id.startsWith('MEDICAL:'))) {
+                    // Update Medical Case Funds
+                    let medicalId = null;
+                    if (donation.transaction_id && donation.transaction_id.startsWith('MEDICAL:')) {
+                        medicalId = donation.transaction_id.split(':')[1];
+                    }
+
+                    if (medicalId) {
+                        const { data: medData, error: medFetchError } = await supabase
+                            .from('medical_cases')
+                            .select('collected_amount')
+                            .eq('id', medicalId)
+                            .single();
+
+                        if (!medFetchError && medData) {
+                            const newMedAmount = (medData.collected_amount || 0) + amount;
+                            await supabase.from('medical_cases').update({ collected_amount: newMedAmount }).eq('id', medicalId);
+                        }
+                    }
+                }
             }
 
             alert(`Donation marked as ${status}`);
@@ -940,7 +978,7 @@ const DonationsTab = () => {
                                             {new Date(d.created_at).toLocaleDateString()}
                                         </td>
                                         <td style={{ padding: '12px' }}>
-                                            {d.disasters?.title || 'Unknown'}
+                                            {d.disasters?.title || (d.donation_type === 'medical' ? 'Medical Donation' : (d.donation_type === 'general' ? 'General Donation' : 'General Donation'))}
                                         </td>
                                         <td style={{ padding: '12px', color: '#10b981', fontWeight: 'bold' }}>
                                             ৳{d.amount}
@@ -960,11 +998,11 @@ const DonationsTab = () => {
                                         <td style={{ padding: '12px' }}>
                                             {d.status === 'pending' && (
                                                 <div style={{ display: 'flex', gap: '8px' }}>
-                                                    <button onClick={() => handleApproval(d.id, 'approved', d.disaster_id, d.amount)}
+                                                    <button onClick={() => handleApproval(d, 'approved')}
                                                         style={{ background: '#10b981', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}>
                                                         Approve
                                                     </button>
-                                                    <button onClick={() => handleApproval(d.id, 'rejected', d.disaster_id, d.amount)}
+                                                    <button onClick={() => handleApproval(d, 'rejected')}
                                                         style={{ background: '#333', color: '#ef4444', border: '1px solid #ef4444', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}>
                                                         Reject
                                                     </button>
