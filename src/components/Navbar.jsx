@@ -169,7 +169,6 @@ const Navbar = () => {
                         <NavItem to="/profile" icon={User} label="Profile" />
                         <NavItem to="/donations" icon={Heart} label="Donate" />
                         <NavItem to="/disasters" icon={AlertTriangle} label="Disasters" />
-                        <NavItem to="/volunteer" icon={Hand} label="Volunteer" />
                         <NavItem to="/medical" icon={Stethoscope} label="Medical" />
 
                         {userRole === 'volunteer' ? (

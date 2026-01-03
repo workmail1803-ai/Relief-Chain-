@@ -21,6 +21,7 @@ import ApplyVolunteer from './pages/ApplyVolunteer';
 import VolunteerHub from './pages/VolunteerHub';
 import VolunteerFeed from './pages/VolunteerFeed';
 import NotFound from './pages/NotFound';
+import Donations from './pages/Donations';
 
 // Protected Route Component
 const ProtectedRoute = ({ children, allowedRoles = [] }) => {
@@ -75,6 +76,15 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <Profile />
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/donations"
+                element={
+                  <ProtectedRoute>
+                    <Donations />
                   </ProtectedRoute>
                 }
               />

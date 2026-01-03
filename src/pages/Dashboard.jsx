@@ -45,20 +45,25 @@ const Dashboard = () => {
                         .select('*', { count: 'exact', head: true })
                         .eq('status', 'active');
 
-                    // 3. Medical Cases Count
+                    // 3. Active Medical Cases Count
                     const { count: medCount } = await supabase
                         .from('medical_cases')
-                        .select('*', { count: 'exact', head: true });
+                        .select('*', { count: 'exact', head: true })
+                        .eq('status', 'active');
 
-                    // 4. Total Funds (Fetching amounts to sum client-side for now - optimizing requires RPC)
+                    // 4. Total Funds 
                     const { data: disasterFunds } = await supabase.from('disasters').select('collected_amount');
                     const { data: medicalFunds } = await supabase.from('medical_cases').select('collected_amount');
+                    // 5. General Funds
+                    const { data: generalFunds } = await supabase.from('donations').select('amount').eq('donation_type', 'general');
 
                     const totalDisaster = disasterFunds?.reduce((sum, item) => sum + (item.collected_amount || 0), 0) || 0;
                     const totalMedical = medicalFunds?.reduce((sum, item) => sum + (item.collected_amount || 0), 0) || 0;
+                    const totalGeneral = generalFunds?.reduce((sum, item) => sum + (item.amount || 0), 0) || 0;
 
                     setStats({
-                        totalCollected: totalDisaster + totalMedical,
+                        totalCollected: totalDisaster + totalMedical + totalGeneral,
+                        generalFund: totalGeneral,
                         volunteers: volCount || 0,
                         activeDisasters: disCount || 0,
                         medicalCasesCount: medCount || 0
@@ -79,7 +84,7 @@ const Dashboard = () => {
                         id: d.id,
                         title: d.title,
                         volunteers: `${d.assigned_volunteers_count || 0}/${d.volunteers_needed || 0}`,
-                        funds: `$${d.collected_amount || 0} / $${d.target_amount}`,
+                        funds: `৳${d.collected_amount || 0} / ৳${d.target_amount}`,
                         image: d.image_url || 'https://images.unsplash.com/photo-1544365558-35aa4afcf11f?auto=format&fit=crop&q=80',
                         is_urgent: d.is_urgent
                     }));
@@ -98,7 +103,7 @@ const Dashboard = () => {
                         id: m.id,
                         title: m.patient_name,
                         condition: m.condition,
-                        amount: `$${m.target_amount}`,
+                        amount: `৳${m.target_amount}`,
                         image: m.image_url || 'https://images.unsplash.com/photo-1516574187841-693083f6e163?auto=format&fit=crop&q=80'
                     }));
                     setMedicalCases(formattedMedical);
@@ -107,6 +112,23 @@ const Dashboard = () => {
         };
         fetchData();
     }, [user]);
+
+    // Helper for table rows
+    const FinancialRow = ({ label, amount, type }) => (
+        <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            <td style={{ padding: '12px', color: '#ccc' }}>{label}</td>
+            <td style={{ padding: '12px', textAlign: 'right', fontWeight: 'bold' }}>৳{amount.toLocaleString()}</td>
+            <td style={{ padding: '12px', textAlign: 'right' }}>
+                <span style={{
+                    fontSize: '0.75rem', padding: '4px 8px', borderRadius: '4px',
+                    background: type === 'general' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(99, 102, 241, 0.1)',
+                    color: type === 'general' ? '#10b981' : '#6366f1'
+                }}>
+                    {type.toUpperCase()}
+                </span>
+            </td>
+        </tr>
+    );
 
     return (
         <div style={{ minHeight: '100vh', padding: '1rem' }}>
@@ -145,11 +167,11 @@ const Dashboard = () => {
                         <InfoCards stats={stats} />
                     </div>
 
-                    <div className="dashboard-fade-in" style={{ animationDelay: '0.3s' }}>
+                    <div className="dashboard-fade-in" style={{ animationDelay: '0.4s' }}>
                         <SectionHighlights title="Urgent Disaster Response" items={disasters} type="disaster" />
                     </div>
 
-                    <div className="dashboard-fade-in" style={{ animationDelay: '0.4s' }}>
+                    <div className="dashboard-fade-in" style={{ animationDelay: '0.5s' }}>
                         <SectionHighlights title="Medical Aid Needed" items={medicalCases} type="medical" />
                     </div>
                 </div>

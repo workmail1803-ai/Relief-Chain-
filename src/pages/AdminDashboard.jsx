@@ -29,7 +29,9 @@ const AdminDashboard = () => {
             case 'disasters':
                 return <DisastersTab />;
             case 'medical':
-                return <div className="glass-card p-6">Medical Management (Coming Soon)</div>;
+                return <MedicalTab />;
+            case 'funds':
+                return <FundsTab />;
             case 'users':
                 return <UsersAndVolunteersTab />;
             case 'applications':
@@ -974,6 +976,519 @@ const VolunteerApplicationsTab = () => {
                         </tbody>
                     </table>
                 )}
+            </div>
+        </div>
+    );
+};
+
+const MedicalTab = () => {
+    const [cases, setCases] = useState([]);
+    const [pendingCases, setPendingCases] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [showForm, setShowForm] = useState(false);
+    const [editingId, setEditingId] = useState(null);
+    const [page, setPage] = useState(0);
+    const [hasMore, setHasMore] = useState(true);
+    const PER_PAGE = 10;
+
+    const [formData, setFormData] = useState({
+        title: '',
+        patient_name: '',
+        hospital_name: '',
+        condition: '', // Medical condition
+        severity: 'medium',
+        target_amount: '',
+        description: '',
+        is_urgent: false,
+        image_url: '',
+        gallery: [],
+        bkash_number: '',
+        documents_url: ''
+    });
+
+    useEffect(() => {
+        fetchCases(0);
+
+        const channel = supabase
+            .channel('admin-realtime-medical')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'medical_cases' },
+                () => fetchCases(0)
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, []);
+
+    const fetchCases = async (pageNumber = 0) => {
+        setLoading(true);
+        try {
+            const from = pageNumber * PER_PAGE;
+            const to = from + PER_PAGE - 1;
+
+            // Fetch Pending
+            const { data: pendingData } = await supabase.from('medical_cases').select('*').eq('status', 'pending');
+            setPendingCases(pendingData || []);
+
+            // Fetch Active/Completed
+            const { data, error } = await supabase
+                .from('medical_cases')
+                .select('*')
+                .neq('status', 'pending')
+                .order('created_at', { ascending: false })
+                .range(from, to);
+
+            if (error) console.error(error);
+            else {
+                if (data.length < PER_PAGE) setHasMore(false);
+                if (pageNumber === 0) setCases(data || []);
+                else setCases(prev => [...prev, ...data]);
+            }
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const loadMore = () => {
+        const nextPage = page + 1;
+        setPage(nextPage);
+        fetchCases(nextPage);
+    };
+
+    const handleInteract = (e) => {
+        const { name, value, type, checked } = e.target;
+        setFormData(prev => ({
+            ...prev,
+            [name]: type === 'checkbox' ? checked : value
+        }));
+    };
+
+    const handleImageUpload = async (e) => {
+        try {
+            const files = Array.from(e.target.files);
+            if (files.length === 0) return;
+
+            const newImageUrls = [];
+            for (const file of files) {
+                const compressedFile = await compressImage(file); // Reusing utility
+                const fileExt = compressedFile.name.split('.').pop();
+                const fileName = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${fileExt}`;
+                const filePath = `${fileName}`;
+
+                const { error: uploadError } = await supabase.storage
+                    .from('medical')
+                    .upload(filePath, compressedFile);
+
+                if (uploadError) throw uploadError;
+
+                const { data } = supabase.storage.from('medical').getPublicUrl(filePath);
+                newImageUrls.push(data.publicUrl);
+            }
+
+            setFormData(prev => ({
+                ...prev,
+                image_url: prev.image_url || newImageUrls[0],
+                gallery: [...(prev.gallery || []), ...newImageUrls]
+            }));
+            alert(`Uploaded ${newImageUrls.length} file(s).`);
+        } catch (error) {
+            console.error(error);
+            alert("Upload error: " + error.message);
+        }
+    };
+
+    const startEdit = (item) => {
+        setEditingId(item.id);
+        setFormData({
+            title: item.title,
+            patient_name: item.patient_name || '',
+            hospital_name: item.hospital_name || '',
+            condition: item.condition || '',
+            severity: item.severity || 'medium',
+            target_amount: item.target_amount,
+            description: item.description || '',
+            is_urgent: item.is_urgent,
+            image_url: item.image_url || '',
+            gallery: item.gallery || [],
+            bkash_number: item.bkash_number || '',
+            documents_url: item.documents_url || ''
+        });
+        setShowForm(true);
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        const submitData = {
+            ...formData,
+            target_amount: parseFloat(formData.target_amount) || 0
+        };
+
+        if (editingId) {
+            const { error } = await supabase.from('medical_cases').update(submitData).eq('id', editingId);
+            if (error) alert(error.message);
+            else { alert('Updated!'); setShowForm(false); setEditingId(null); fetchCases(0); }
+        } else {
+            // Admin creating directly
+            const { error } = await supabase.from('medical_cases').insert([{ ...submitData, status: 'active', volunteers_needed: 0 }]); // active by default if admin creates
+            if (error) alert(error.message);
+            else { alert('Created!'); setShowForm(false); fetchCases(0); }
+        }
+    };
+
+    const handleApprove = async (id) => {
+        const { error } = await supabase.from('medical_cases').update({ status: 'active' }).eq('id', id);
+        if (error) alert(error.message);
+        else fetchCases(0);
+    };
+
+    const handleReject = async (id) => {
+        if (!window.confirm("Reject and delete this case?")) return;
+        const { error } = await supabase.from('medical_cases').delete().eq('id', id);
+        if (error) alert(error.message);
+        else fetchCases(0);
+    };
+
+    const handleDelete = async (id) => {
+        if (!window.confirm("Delete this case permanently?")) return;
+        const { error } = await supabase.from('medical_cases').delete().eq('id', id);
+        if (error) alert(error.message);
+        else fetchCases(0);
+    };
+
+    return (
+        <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
+                <h2 style={{ fontSize: '1.2rem' }}>Medical Case Management</h2>
+                <button
+                    onClick={() => { setShowForm(!showForm); setEditingId(null); setFormData({ title: '', patient_name: '', hospital_name: '', condition: '', severity: 'medium', target_amount: '', description: '', is_urgent: false, image_url: '', gallery: [], bkash_number: '', documents_url: '' }); }}
+                    style={{
+                        display: 'flex', alignItems: 'center', gap: '8px',
+                        background: showForm ? '#333' : '#6366f1', color: 'white',
+                        padding: '10px 20px', borderRadius: '8px', border: 'none', cursor: 'pointer'
+                    }}>
+                    {showForm ? 'Cancel' : (<><Plus size={18} /> Add Medical Case</>)}
+                </button>
+            </div>
+
+            {showForm && (
+                <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '2rem', border: '1px solid #6366f1' }}>
+                    <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '1rem' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '8px', color: '#aaa' }}>Title</label>
+                                <input name="title" value={formData.title} onChange={handleInteract} required
+                                    style={{ width: '100%', padding: '10px', background: '#222', border: '1px solid #333', color: 'white', borderRadius: '6px' }} />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '8px', color: '#aaa' }}>Patient Name</label>
+                                <input name="patient_name" value={formData.patient_name} onChange={handleInteract} required
+                                    style={{ width: '100%', padding: '10px', background: '#222', border: '1px solid #333', color: 'white', borderRadius: '6px' }} />
+                            </div>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '8px', color: '#aaa' }}>Hospital</label>
+                                <input name="hospital_name" value={formData.hospital_name} onChange={handleInteract} required
+                                    style={{ width: '100%', padding: '10px', background: '#222', border: '1px solid #333', color: 'white', borderRadius: '6px' }} />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '8px', color: '#aaa' }}>Condition</label>
+                                <input name="condition" value={formData.condition} onChange={handleInteract} required
+                                    style={{ width: '100%', padding: '10px', background: '#222', border: '1px solid #333', color: 'white', borderRadius: '6px' }} />
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '8px', color: '#aaa' }}>Funds Needed</label>
+                                <input name="target_amount" type="number" value={formData.target_amount} onChange={handleInteract} required
+                                    style={{ width: '100%', padding: '10px', background: '#222', border: '1px solid #333', color: 'white', borderRadius: '6px' }} />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '8px', color: '#aaa' }}>Severity</label>
+                                <select name="severity" value={formData.severity} onChange={handleInteract}
+                                    style={{ width: '100%', padding: '10px', background: '#222', border: '1px solid #333', color: 'white', borderRadius: '6px' }}>
+                                    <option value="low">Low</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="high">High</option>
+                                    <option value="critical">Critical</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '8px', color: '#aaa' }}>bKash Number</label>
+                                <input name="bkash_number" value={formData.bkash_number} onChange={handleInteract}
+                                    style={{ width: '100%', padding: '10px', background: '#222', border: '1px solid #333', color: 'white', borderRadius: '6px' }} />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '8px', color: '#aaa' }}>Images (Select Multiple)</label>
+                                <input type="file" multiple accept="image/*" onChange={handleImageUpload}
+                                    style={{ width: '100%', padding: '10px', background: '#222', border: '1px solid #333', color: 'white', borderRadius: '6px' }} />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label style={{ display: 'block', marginBottom: '8px', color: '#aaa' }}>Description</label>
+                            <textarea name="description" value={formData.description} onChange={handleInteract} rows="3"
+                                style={{ width: '100%', padding: '10px', background: '#222', border: '1px solid #333', color: 'white', borderRadius: '6px' }} />
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <input type="checkbox" name="is_urgent" checked={formData.is_urgent} onChange={handleInteract} id="med-urgent" />
+                            <label htmlFor="med-urgent" style={{ color: '#ef4444', fontWeight: 'bold' }}>Mark as Urgent</label>
+                        </div>
+
+                        <button type="submit" style={{ padding: '12px', background: '#6366f1', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+                            {editingId ? 'Update Case' : 'Create Case'}
+                        </button>
+                    </form>
+                </div>
+            )}
+
+            {pendingCases.length > 0 && (
+                <div style={{ marginBottom: '2rem' }}>
+                    <h3 style={{ color: '#f59e0b', fontSize: '1.2rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <AlertTriangle /> Pending Medical Approvals ({pendingCases.length})
+                    </h3>
+                    <div style={{ display: 'grid', gap: '1rem' }}>
+                        {pendingCases.map(p => (
+                            <div key={p.id} className="glass-card" style={{ padding: '1rem', border: '1px solid #f59e0b', display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                <img src={p.image_url} alt="Proof" style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '4px' }} />
+                                <div style={{ flex: 1 }}>
+                                    <h4 style={{ margin: 0, fontSize: '1.1rem', color: 'white' }}>{p.title}</h4>
+                                    <p style={{ margin: '4px 0', color: '#aaa', fontSize: '0.9rem' }}>{p.patient_name} @ {p.hospital_name}</p>
+                                    <p style={{ margin: 0, color: '#f59e0b', fontSize: '0.8rem' }}>Condition: {p.condition}</p>
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                    <button onClick={() => handleApprove(p.id)} style={{ padding: '8px 16px', background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Approve</button>
+                                    <button onClick={() => handleReject(p.id)} style={{ padding: '8px 16px', background: '#333', color: '#ef4444', border: '1px solid #ef4444', borderRadius: '4px', cursor: 'pointer' }}>Reject</button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            <div className="glass-card" style={{ padding: '1rem' }}>
+                {loading ? (
+                    <p style={{ color: '#888', textAlign: 'center' }}>Loading medical cases...</p>
+                ) : (
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                            <tr style={{ borderBottom: '1px solid #333', color: '#888', textAlign: 'left' }}>
+                                <th style={{ padding: '12px' }}>Title</th>
+                                <th style={{ padding: '12px' }}>Patient</th>
+                                <th style={{ padding: '12px' }}>Hospital</th>
+                                <th style={{ padding: '12px' }}>Fund Status</th>
+                                <th style={{ padding: '12px' }}>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {cases.length === 0 ? (
+                                <tr><td colSpan="5" style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>No active medical cases.</td></tr>
+                            ) : (
+                                cases.map(item => (
+                                    <tr key={item.id} style={{ borderBottom: '1px solid #222' }}>
+                                        <td style={{ padding: '12px' }}>
+                                            {item.title}
+                                            {item.is_urgent && <span style={{ marginLeft: '8px', fontSize: '0.7rem', background: '#ef4444', padding: '2px 6px', borderRadius: '4px' }}>URGENT</span>}
+                                        </td>
+                                        <td style={{ padding: '12px' }}>{item.patient_name}</td>
+                                        <td style={{ padding: '12px' }}>{item.hospital_name}</td>
+                                        <td style={{ padding: '12px' }}>
+                                            ${item.collected_amount || 0} / ${item.target_amount}
+                                        </td>
+                                        <td style={{ padding: '12px' }}>
+                                            <div style={{ display: 'flex', gap: '8px' }}>
+                                                <button onClick={() => startEdit(item)}
+                                                    style={{ background: '#333', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}>
+                                                    Edit
+                                                </button>
+                                                <button onClick={() => handleDelete(item.id)}
+                                                    style={{ background: '#ef4444', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}>
+                                                    Delete
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                )}
+                {hasMore && !loading && (
+                    <div style={{ textAlign: 'center', marginTop: '1rem' }}>
+                        <button onClick={loadMore} style={{ background: 'transparent', border: '1px solid #444', color: '#888', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer' }}>
+                            Load More Results
+                        </button>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+const FundsTab = () => {
+    const [generalFund, setGeneralFund] = useState(0);
+    const [zakatFund, setZakatFund] = useState(0);
+    const [activeMissions, setActiveMissions] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    // Allocation Form
+    const [selectedMission, setSelectedMission] = useState('');
+    const [allocationAmount, setAllocationAmount] = useState('');
+    const [mpType, setMpType] = useState('general'); // 'general' or 'zakat'
+
+    useEffect(() => {
+        fetchFunds();
+        fetchActiveMissions();
+    }, []);
+
+    const fetchFunds = async () => {
+        // Calculate General Fund Balance (Sum of all 'general' type donations)
+        const { data: generalData } = await supabase.from('donations')
+            .select('amount')
+            .eq('donation_type', 'general');
+
+        const totalGeneral = generalData ? generalData.reduce((acc, curr) => acc + curr.amount, 0) : 0;
+        setGeneralFund(totalGeneral);
+
+        const { data: zakatData } = await supabase.from('donations')
+            .select('amount')
+            .eq('donation_type', 'zakat');
+
+        const totalZakat = zakatData ? zakatData.reduce((acc, curr) => acc + curr.amount, 0) : 0;
+        setZakatFund(totalZakat);
+        setLoading(false);
+    };
+
+    const fetchActiveMissions = async () => {
+        // Fetch Disasters
+        const { data: disasters } = await supabase.from('disasters').select('id, title').eq('status', 'active');
+        // Fetch Medical
+        const { data: medical } = await supabase.from('medical_cases').select('id, title').eq('status', 'active');
+
+        const combined = [
+            ...(disasters || []).map(d => ({ ...d, type: 'disaster' })),
+            ...(medical || []).map(m => ({ ...m, type: 'medical' }))
+        ];
+        setActiveMissions(combined);
+    };
+
+    const handleAllocate = async (e) => {
+        e.preventDefault();
+        const amt = parseFloat(allocationAmount);
+        if (!selectedMission || !amt || amt <= 0) return alert("Invalid inputs");
+
+        const sourceFund = mpType === 'general' ? generalFund : zakatFund;
+        if (amt > sourceFund) return alert("Insufficient funds in selected pool.");
+
+        try {
+            const mission = activeMissions.find(m => m.id === selectedMission);
+            const table = mission.type === 'disasters' ? 'disasters' : (mission.type === 'medical' ? 'medical_cases' : 'disasters'); // simple check, actually type was set above
+
+            // 1. Deduct from Pool (Insert negative donation record)
+            const { error: deductError } = await supabase.from('donations').insert({
+                user_id: (await supabase.auth.getUser()).data.user.id, // Admin ID
+                amount: -amt,
+                donation_type: mpType,
+                payment_method: 'bkash', // Simulated
+                phone_last_4: '0000',
+                transaction_id: `ALLOC_TO_${mission.id.slice(0, 8)}`,
+                status: 'approved'
+            });
+            if (deductError) throw deductError;
+
+            // 2. Add to Target Mission (Update collected_amount)
+            // We verify table name based on type
+            const tableName = mission.type === 'medical' ? 'medical_cases' : 'disasters';
+
+            // We need to fetch current amount first or use RPC increment. 
+            // Since we don't have RPC setup, we read-then-write (optimistic).
+            const { data: current, error: fetchErr } = await supabase.from(tableName).select('collected_amount').eq('id', mission.id).single();
+            if (fetchErr) throw fetchErr;
+
+            const { error: updateError } = await supabase.from(tableName)
+                .update({ collected_amount: (current.collected_amount || 0) + amt })
+                .eq('id', mission.id);
+
+            if (updateError) throw updateError;
+
+            alert("Allocation Successful!");
+            setAllocationAmount('');
+            fetchFunds(); // Refresh balance
+        } catch (error) {
+            console.error(error);
+            alert("Allocation Failed: " + error.message);
+        }
+    };
+
+    return (
+        <div style={{ padding: '1rem' }}>
+            <h2 style={{ marginBottom: '2rem', fontSize: '1.5rem' }}>Fund Allocation Center</h2>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '2rem' }}>
+                <div className="glass-card" style={{ padding: '2rem', textAlign: 'center', border: '1px solid #6366f1', background: 'rgba(99, 102, 241, 0.1)' }}>
+                    <h3 style={{ color: '#aaa', margin: 0 }}>General Fund Available</h3>
+                    <p style={{ fontSize: '3rem', fontWeight: 'bold', color: 'white', margin: '10px 0' }}>৳{generalFund.toLocaleString()}</p>
+                    <p style={{ color: '#6366f1', fontSize: '0.9rem' }}>Unrestricted Funds</p>
+                </div>
+                <div className="glass-card" style={{ padding: '2rem', textAlign: 'center', border: '1px solid #10b981', background: 'rgba(16, 185, 129, 0.1)' }}>
+                    <h3 style={{ color: '#aaa', margin: 0 }}>Zakat Fund Available</h3>
+                    <p style={{ fontSize: '3rem', fontWeight: 'bold', color: 'white', margin: '10px 0' }}>৳{zakatFund.toLocaleString()}</p>
+                    <p style={{ color: '#10b981', fontSize: '0.9rem' }}>Restricted for Zakat Eligible</p>
+                </div>
+            </div>
+
+            <div className="glass-card" style={{ padding: '2rem', border: '1px solid #333' }}>
+                <h3 style={{ fontSize: '1.2rem', marginBottom: '1.5rem', color: 'white' }}>Allocate Funds to Active Missions</h3>
+                <form onSubmit={handleAllocate} style={{ display: 'grid', gap: '1.5rem', maxWidth: '600px' }}>
+
+                    <div>
+                        <label style={{ display: 'block', color: '#aaa', marginBottom: '8px' }}>Source Pool</label>
+                        <select value={mpType} onChange={e => setMpType(e.target.value)}
+                            style={{ width: '100%', padding: '12px', background: '#222', border: '1px solid #333', color: 'white', borderRadius: '8px' }}>
+                            <option value="general">General Fund (৳{generalFund})</option>
+                            <option value="zakat">Zakat Fund (৳{zakatFund})</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label style={{ display: 'block', color: '#aaa', marginBottom: '8px' }}>Target Mission</label>
+                        <select value={selectedMission} onChange={e => setSelectedMission(e.target.value)} required
+                            style={{ width: '100%', padding: '12px', background: '#222', border: '1px solid #333', color: 'white', borderRadius: '8px' }}>
+                            <option value="">Select an active mission...</option>
+                            <optgroup label="Disaster Relief">
+                                {activeMissions.filter(m => m.type === 'disaster').map(m => (
+                                    <option key={m.id} value={m.id}>{m.title}</option>
+                                ))}
+                            </optgroup>
+                            <optgroup label="Medical Cases">
+                                {activeMissions.filter(m => m.type === 'medical').map(m => (
+                                    <option key={m.id} value={m.id}>{m.title}</option>
+                                ))}
+                            </optgroup>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label style={{ display: 'block', color: '#aaa', marginBottom: '8px' }}>Amount to Transfer</label>
+                        <input type="number" value={allocationAmount} onChange={e => setAllocationAmount(e.target.value)} placeholder="0.00"
+                            style={{ width: '100%', padding: '12px', background: '#222', border: '1px solid #333', color: 'white', borderRadius: '8px' }} />
+                    </div>
+
+                    <button type="submit"
+                        style={{ padding: '14px', background: '#fff', color: '#000', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' }}>
+                        Confirm Allocation
+                    </button>
+                </form>
             </div>
         </div>
     );
